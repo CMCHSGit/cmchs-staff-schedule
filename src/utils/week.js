@@ -32,18 +32,19 @@ export const DEFAULT_LOCATION = 'Cass Office'
 
 /** Days start blank — people pick a location rather than have one silently pre-selected. */
 export function emptySchedule() {
-  return WEEK_DAYS.map(() => ({ location: '' }))
+  return WEEK_DAYS.map(() => ({ location: '', onCall: false }))
 }
 
-/** One location per day; migrate legacy { am, pm } records. */
+/** One location (+ on-call flag) per day; migrate legacy { am, pm } records. */
 export function normalizeSchedule(days) {
   return WEEK_DAYS.map((_, i) => {
     const d = days?.[i] || {}
-    if (d.location !== undefined && d.location !== '') return { location: d.location }
+    const onCall = !!d.onCall
+    if (d.location !== undefined && d.location !== '') return { location: d.location, onCall }
     const am = d.am || ''
     const pm = d.pm || ''
     const location = am && pm && am !== pm ? am : (am || pm || '')
-    return { location }
+    return { location, onCall }
   })
 }
 

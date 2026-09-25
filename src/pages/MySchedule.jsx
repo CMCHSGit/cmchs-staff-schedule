@@ -5,9 +5,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, weekLabel, WEEK_DAYS, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
 import { getTeamConfig, quickFillsForTeam } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
+import { locClass } from '../utils/locationColor'
 import WeekNav from '../components/WeekNav'
 import Toast   from '../components/Toast'
 import LocationCombobox from '../components/LocationCombobox'
+import Toggle  from '../components/Toggle'
 
 const MAX_WEEKS_AHEAD = 2
 const MAX_WEEKS_BACK  = 4
@@ -87,16 +89,16 @@ export default function MySchedule() {
 
   useEffect(() => { loadSchedule() }, [loadSchedule])
 
-  function updateDay(dayIdx, value) {
+  function updateDay(dayIdx, patch) {
     setSchedule(prev => {
       const next = prev.map(d => ({ ...d }))
-      next[dayIdx] = { location: value }
+      next[dayIdx] = { ...next[dayIdx], ...patch }
       return next
     })
   }
 
   function fillAllDays(value) {
-    setSchedule(WEEK_DAYS.map(() => ({ location: value })))
+    setSchedule(prev => prev.map(d => ({ ...d, location: value })))
   }
 
   const locationOptions = [
@@ -233,6 +235,8 @@ export default function MySchedule() {
               date.setDate(date.getDate() + i)
               const dateLabel = date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
               const value = schedule[i]?.location ?? ''
+              const onCall = schedule[i]?.onCall ?? false
+              const tint = locClass(onCall ? `${value} on call` : value)
 
               return (
                 <div className="card" key={day}>
@@ -244,8 +248,16 @@ export default function MySchedule() {
                     <LocationCombobox
                       value={value}
                       options={locationOptions}
-                      onChange={val => updateDay(i, val)}
+                      onChange={val => updateDay(i, { location: val })}
                       onNewValue={registerNewLocation}
+                      className={tint}
+                    />
+                  </div>
+                  <div className="card-row card-row-oncall">
+                    <Toggle
+                      checked={onCall}
+                      onChange={val => updateDay(i, { onCall: val })}
+                      label="📞 On call"
                     />
                   </div>
                 </div>

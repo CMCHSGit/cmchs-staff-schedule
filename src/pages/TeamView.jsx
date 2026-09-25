@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, weekLabel } from '../utils/week'
 import { TEAMS, getTeamConfig } from '../utils/teams'
+import { locClass } from '../utils/locationColor'
 import WeekNav from '../components/WeekNav'
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
@@ -160,6 +161,13 @@ function dayLocation(d) {
   return am || pm || ''
 }
 
+/** Combines location + on-call into one display label, e.g. "Cass Office / On Call". */
+function dayLabel(d) {
+  const loc = dayLocation(d)
+  if (!d?.onCall) return loc
+  return loc ? `${loc} / On Call` : 'On Call'
+}
+
 function UserRow({ user, schedule }) {
   const notes = schedule?.comments?.trim()
   return (
@@ -170,7 +178,7 @@ function UserRow({ user, schedule }) {
       {schedule
         ? schedule.days.map((d, i) => (
             <td key={i} className="team-td-day">
-              <LocCell val={dayLocation(d)} />
+              <LocCell day={d} />
             </td>
           ))
         : Array(5).fill(null).map((_, i) => (
@@ -190,20 +198,10 @@ function UserRow({ user, schedule }) {
   )
 }
 
-function LocCell({ val }) {
-  const cls = locClass(val)
-  const label = abbrev(val)
-  return <span className={`loc ${cls}`} title={val}>{label}</span>
-}
-
-function locClass(val) {
-  if (!val) return 'loc-blank'
-  const v = val.toLowerCase()
-  if (v.includes('leave'))      return 'loc-leave'
-  if (v.includes('non working') || v.includes('nonwork')) return 'loc-nonwork'
-  if (v.includes('remote'))     return 'loc-remote'
-  if (v.includes('office') || v.includes('cass')) return 'loc-office'
-  return 'loc-travel'
+function LocCell({ day }) {
+  const label = dayLabel(day)
+  const cls = locClass(day?.onCall ? `${dayLocation(day)} on call` : dayLocation(day))
+  return <span className={`loc ${cls}`} title={label}>{abbrev(label)}</span>
 }
 
 function abbrev(val) {

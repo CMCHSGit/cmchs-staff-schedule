@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
  * rounded corners — an absolutely-positioned dropdown nested inside would
  * get clipped at the card's edge instead of floating over the page.
  */
-export default function LocationCombobox({ value, options, onChange, onNewValue }) {
+export default function LocationCombobox({ value, options, onChange, onNewValue, className = '' }) {
   const [text, setText] = useState(value || '')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
@@ -79,7 +79,7 @@ export default function LocationCombobox({ value, options, onChange, onNewValue 
     <div className="combobox">
       <input
         ref={inputRef}
-        className="input combobox-input"
+        className={`input combobox-input ${className}`}
         value={text}
         placeholder="Type or pick a location…"
         onChange={e => { setText(e.target.value); setOpen(true); setHighlight(0) }}

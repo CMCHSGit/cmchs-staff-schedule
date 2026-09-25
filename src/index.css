@@ -12,16 +12,12 @@
   --accent:   #111111;
   --radius:   10px;
   --radius-sm: 6px;
-  --leave-bg:   #fef2f2;
-  --leave-text: #991b1b;
-  --nonwork-bg: #f3f4f6;
+  --leave-bg:    #ffedd5;
+  --leave-text:  #9a3412;
+  --nonwork-bg:  #f3f4f6;
   --nonwork-text: #6b7280;
-  --office-bg:  #eff6ff;
-  --office-text: #1d4ed8;
-  --remote-bg:  #f0fdf4;
-  --remote-text: #166534;
-  --travel-bg:  #fffbeb;
-  --travel-text: #92400e;
+  --special-bg:  #fef9c3;
+  --special-text: #854d0e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -134,6 +130,23 @@ html, body, #root {
 .half-label  { font-size: 12px; color: var(--text-3); width: 26px; flex-shrink: 0; }
 .card-row-location select { flex: 1; }
 
+/* ── On-call toggle ── */
+.card-row-oncall { justify-content: flex-end; }
+.toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  width: 36px; height: 20px; border-radius: 999px; position: relative;
+  background: var(--bg-3); transition: background 0.15s; flex-shrink: 0;
+}
+.toggle input:checked + .toggle-track { background: var(--special-text); }
+.toggle-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transition: transform 0.15s;
+}
+.toggle input:checked + .toggle-track .toggle-knob { transform: translateX(16px); }
+.toggle-text { font-size: 13px; color: var(--text-2); }
+
 /* ── Location combobox ── */
 .combobox { position: relative; flex: 1; min-width: 0; }
 .combobox-input {
@@ -144,6 +157,9 @@ html, body, #root {
   background-position: right 10px center;
   padding-right: 28px;
 }
+.combobox-input.loc-leave   { background-color: var(--leave-bg); }
+.combobox-input.loc-nonwork { background-color: var(--nonwork-bg); }
+.combobox-input.loc-special { background-color: var(--special-bg); }
 .combobox-list {
   /* top/left/width are set inline (LocationCombobox.jsx) since this list is
      portaled to document.body, positioned to line up with its input. */
@@ -271,11 +287,10 @@ select:focus { outline: none; border-color: var(--text); }
 
 /* ── Location pills in team view ── */
 .loc { font-size: 11px; padding: 3px 7px; border-radius: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
-.loc-office  { background: var(--office-bg);  color: var(--office-text); }
-.loc-remote  { background: var(--remote-bg);  color: var(--remote-text); }
-.loc-travel  { background: var(--travel-bg);  color: var(--travel-text); }
 .loc-leave   { background: var(--leave-bg);   color: var(--leave-text); }
 .loc-nonwork { background: var(--nonwork-bg); color: var(--nonwork-text); }
+.loc-special { background: var(--special-bg); color: var(--special-text); }
+.loc-default { background: transparent; color: var(--text); }
 .loc-blank   { background: var(--bg-3); color: var(--text-3); }
 
 /* ── Team view table ── */
