@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { doc, getDoc, setDoc, addDoc, serverTimestamp, collection, getDocs, query, where, orderBy } from 'firebase/firestore'
+import { doc, getDoc, setDoc, addDoc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, weekLabel, WEEK_DAYS, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
@@ -55,13 +55,18 @@ export default function MySchedule() {
 
   useEffect(() => {
     async function loadLocations() {
-      const q = query(
-        collection(db, 'locations'),
-        where('active', '==', true),
-        orderBy('order')
-      )
-      const snap = await getDocs(q)
-      setLocations(snap.docs.map(d => d.data().name))
+      try {
+        // Sorted client-side rather than via orderBy('order') — combining an
+        // equality filter with a sort on a different field needs a composite
+        // Firestore index, which doesn't exist here, and the query fails
+        // silently (rejected promise, never caught) without one.
+        const q = query(collection(db, 'locations'), where('active', '==', true))
+        const snap = await getDocs(q)
+        const docs = snap.docs.map(d => d.data()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        setLocations(docs.map(d => d.name))
+      } catch (e) {
+        console.error('Failed to load locations:', e)
+      }
     }
     loadLocations()
   }, [])

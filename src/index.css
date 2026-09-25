@@ -287,11 +287,11 @@ select:focus { outline: none; border-color: var(--text); }
 
 /* ── Location pills in team view ── */
 .loc { font-size: 11px; padding: 3px 7px; border-radius: 20px; white-space: nowrap; }
-.loc-leave   { background: var(--leave-bg);   color: var(--leave-text); }
-.loc-nonwork { background: var(--nonwork-bg); color: var(--nonwork-text); }
-.loc-special { background: var(--special-bg); color: var(--special-text); }
-.loc-default { background: transparent; color: var(--text); }
-.loc-blank   { background: var(--bg-3); color: var(--text-3); }
+.loc-leave   { background-color: var(--leave-bg);   color: var(--leave-text); }
+.loc-nonwork { background-color: var(--nonwork-bg); color: var(--nonwork-text); }
+.loc-special { background-color: var(--special-bg); color: var(--special-text); }
+.loc-default { background-color: transparent; color: var(--text); }
+.loc-blank   { background-color: var(--bg-3); color: var(--text-3); }
 
 /* ── Team view table ── */
 .team-table { width: 100%; border-collapse: collapse; table-layout: auto; min-width: 480px; }
