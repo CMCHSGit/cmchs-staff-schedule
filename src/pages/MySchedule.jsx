@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query, where, orderBy } from 'firebase/firestore'
+import { doc, getDoc, setDoc, addDoc, serverTimestamp, collection, getDocs, query, where, orderBy } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, weekLabel, WEEK_DAYS, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
@@ -7,6 +7,7 @@ import { getTeamConfig, quickFillsForTeam } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
 import WeekNav from '../components/WeekNav'
 import Toast   from '../components/Toast'
+import LocationCombobox from '../components/LocationCombobox'
 
 const MAX_WEEKS_AHEAD = 2
 const MAX_WEEKS_BACK  = 4
@@ -17,7 +18,7 @@ export default function MySchedule() {
   const teamCfg = getTeamConfig(team)
 
   const [weekOffset,  setWeekOffset]  = useState(0)
-  const [schedule,    setSchedule]    = useState(() => emptySchedule(team))
+  const [schedule,    setSchedule]    = useState(() => emptySchedule())
   const [comments,    setComments]    = useState('')
   const [savedAt,     setSavedAt]     = useState(null)
   const [locations,   setLocations]   = useState([])
@@ -70,11 +71,11 @@ export default function MySchedule() {
       const snap = await getDoc(ref)
       if (snap.exists()) {
         const data = snap.data()
-        setSchedule(normalizeSchedule(data.days, team))
+        setSchedule(normalizeSchedule(data.days))
         setComments(data.comments || '')
         setSavedAt(data.submittedAt?.toDate())
       } else {
-        setSchedule(emptySchedule(team))
+        setSchedule(emptySchedule())
         setComments('')
         setSavedAt(null)
       }
@@ -108,10 +109,26 @@ export default function MySchedule() {
 
   const quickFills = quickFillsForTeam(team, locations)
 
+  function registerNewLocation(name) {
+    setLocations(prev => prev.some(l => l.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name])
+  }
+
+  /** Any location someone typed that isn't a known option yet becomes one for everyone. */
+  async function persistNewLocations(dayLocations) {
+    const known = new Set(locations.map(l => l.toLowerCase()))
+    const fresh = [...new Set(dayLocations.filter(Boolean))].filter(l => !known.has(l.toLowerCase()))
+    if (fresh.length === 0) return
+    await Promise.all(fresh.map(name => addDoc(collection(db, 'locations'), {
+      name, order: Date.now(), active: true, createdAt: serverTimestamp(),
+    })))
+    setLocations(prev => [...prev, ...fresh])
+  }
+
   async function saveSchedule() {
     if (!user) return
     setSaving(true)
     try {
+      await persistNewLocations(schedule.map(d => d.location))
       const ref = doc(db, 'schedules', scheduleId(weekStart, user.uid))
       await setDoc(ref, {
         uid:         user.uid,
@@ -198,65 +215,64 @@ export default function MySchedule() {
         </div>
       )}
 
-      <div style={{ paddingTop: 8 }}>
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-            <div className="spinner" />
-          </div>
-        ) : (
-          WEEK_DAYS.map((day, i) => {
-            const date = new Date(weekStart + 'T00:00:00')
-            date.setDate(date.getDate() + i)
-            const dateLabel = date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
-            const value = schedule[i]?.location ?? ''
+      <div className="schedule-panel">
+        <div style={{ paddingTop: 8 }}>
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+              <div className="spinner" />
+            </div>
+          ) : (
+            WEEK_DAYS.map((day, i) => {
+              const date = new Date(weekStart + 'T00:00:00')
+              date.setDate(date.getDate() + i)
+              const dateLabel = date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
+              const value = schedule[i]?.location ?? ''
 
-            return (
-              <div className="card" key={day}>
-                <div className="card-header">
-                  <span className="card-day">{day}</span>
-                  <span className="card-date">{dateLabel}</span>
+              return (
+                <div className="card" key={day}>
+                  <div className="card-header">
+                    <span className="card-day">{day}</span>
+                    <span className="card-date">{dateLabel}</span>
+                  </div>
+                  <div className="card-row card-row-location">
+                    <LocationCombobox
+                      value={value}
+                      options={locationOptions}
+                      onChange={val => updateDay(i, val)}
+                      onNewValue={registerNewLocation}
+                    />
+                  </div>
                 </div>
-                <div className="card-row card-row-location">
-                  <select
-                    value={value}
-                    onChange={e => updateDay(i, e.target.value)}
-                  >
-                    {!value && <option value="">— select —</option>}
-                    {locationOptions.map(l => (
-                      <option key={l || 'empty'} value={l}>{l || '— select —'}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )
-          })
-        )}
-      </div>
+              )
+            })
+          )}
+        </div>
 
-      <div className="comments-section">
-        <label className="comments-label" htmlFor="week-comments">Comments</label>
-        <p className="text-sm text-muted" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-          e.g. returning from leave, client visits, or anything the team should know this week.
-        </p>
-        <textarea
-          id="week-comments"
-          className="input comments-input"
-          rows={3}
-          placeholder="Optional notes for the week…"
-          value={comments}
-          onChange={e => setComments(e.target.value)}
-        />
-      </div>
+        <div className="comments-section">
+          <label className="comments-label" htmlFor="week-comments">Comments</label>
+          <p className="text-sm text-muted" style={{ marginBottom: 8, lineHeight: 1.4 }}>
+            e.g. returning from leave, client visits, or anything the team should know this week.
+          </p>
+          <textarea
+            id="week-comments"
+            className="input comments-input"
+            rows={3}
+            placeholder="Optional notes for the week…"
+            value={comments}
+            onChange={e => setComments(e.target.value)}
+          />
+        </div>
 
-      <div style={{ padding: '0 16px 24px' }}>
-        <button
-          className="btn btn-primary btn-full"
-          style={{ padding: 13, fontSize: 15 }}
-          onClick={saveSchedule}
-          disabled={saving}
-        >
-          {saving ? <span className="spinner" style={{ width: 18, height: 18, borderTopColor: 'var(--bg)' }} /> : 'Save & share schedule'}
-        </button>
+        <div style={{ padding: '0 16px 24px' }}>
+          <button
+            className="btn btn-primary btn-full"
+            style={{ padding: 13, fontSize: 15 }}
+            onClick={saveSchedule}
+            disabled={saving}
+          >
+            {saving ? <span className="spinner" style={{ width: 18, height: 18, borderTopColor: 'var(--bg)' }} /> : 'Save & share schedule'}
+          </button>
+        </div>
       </div>
 
       {toast && <Toast message={toast} />}

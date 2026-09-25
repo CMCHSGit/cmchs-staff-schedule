@@ -2,6 +2,11 @@ import { precacheAndRoute } from 'workbox-precaching'
 import { registerRoute } from 'workbox-routing'
 import { NetworkFirst } from 'workbox-strategies'
 
+// Activate a new deploy immediately instead of waiting for every open tab
+// to close first — otherwise people can be stuck on stale cached UI.
+self.skipWaiting()
+self.addEventListener('activate', (event) => event.waitUntil(clients.claim()))
+
 precacheAndRoute(self.__WB_MANIFEST)
 
 registerRoute(

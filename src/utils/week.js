@@ -28,24 +28,21 @@ export function weekLabel(isoMonday) {
 
 export const WEEK_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 
-import { defaultLocationForTeam } from './teams'
-
 export const DEFAULT_LOCATION = 'Cass Office'
 
-export function emptySchedule(team) {
-  const loc = defaultLocationForTeam(team)
-  return WEEK_DAYS.map(() => ({ location: loc }))
+/** Days start blank — people pick a location rather than have one silently pre-selected. */
+export function emptySchedule() {
+  return WEEK_DAYS.map(() => ({ location: '' }))
 }
 
 /** One location per day; migrate legacy { am, pm } records. */
-export function normalizeSchedule(days, team) {
-  const fallback = defaultLocationForTeam(team)
+export function normalizeSchedule(days) {
   return WEEK_DAYS.map((_, i) => {
     const d = days?.[i] || {}
     if (d.location !== undefined && d.location !== '') return { location: d.location }
     const am = d.am || ''
     const pm = d.pm || ''
-    const location = am && pm && am !== pm ? am : (am || pm || fallback)
+    const location = am && pm && am !== pm ? am : (am || pm || '')
     return { location }
   })
 }

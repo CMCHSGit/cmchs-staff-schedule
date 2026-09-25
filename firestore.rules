@@ -13,10 +13,16 @@ service cloud.firestore {
       allow write: if isOwner(uid) || isAdmin();
     }
 
-    // Locations — all signed-in users can read, only admins write
+    // Locations — all signed-in users can read and add new ones (so a
+    // location someone types while filling out their schedule becomes a
+    // suggestion for everyone); only admins can edit or remove existing ones.
     match /locations/{locId} {
-      allow read:  if isSignedIn();
-      allow write: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.active == true;
+      allow update, delete: if isAdmin();
     }
 
     // Schedules — users read/write their own, all signed-in users read any (for team view)
