@@ -17,9 +17,9 @@
  *   FIREBASE_CLIENT_EMAIL
  *   FIREBASE_PRIVATE_KEY
  *   RESEND_API_KEY
- *   RESEND_FROM          e.g. "Where This Week <noreply@yourcompany.com>"
+ *   RESEND_FROM          e.g. "CMCHS Staff Schedule <noreply@yourcompany.com>"
  *   CRON_SECRET          a random secret to protect the endpoint
- *   APP_URL              e.g. "https://wherethisweek.vercel.app"
+ *   APP_URL              e.g. "https://schedule.chsnz.co.nz"
  */
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app'
@@ -88,7 +88,7 @@ async function sendReminderEmail(to, name, weekStart) {
             Fill out my schedule →
           </a>
           <p style="color: #999; font-size: 13px; margin-top: 32px;">
-            You're receiving this because you're part of the Where This Week team tracker.
+            You're receiving this because you're part of the CMCHS Staff Schedule team tracker.
           </p>
         </div>
       `,

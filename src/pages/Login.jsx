@@ -26,7 +26,7 @@ export default function Login() {
     <div className="login-page">
       <div className="login-logo">📍</div>
       <div>
-        <h1 className="login-title">Where This Week</h1>
+        <h1 className="login-title">CMCHS Staff Schedule</h1>
         <p className="login-sub mt-8">
           Let your team know where you'll be each day.
         </p>

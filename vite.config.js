@@ -15,8 +15,8 @@ export default defineConfig({
       },
       includeAssets: ['icons/*.png'],
       manifest: {
-        name: 'Where This Week',
-        short_name: 'Where',
+        name: 'CMCHS Staff Schedule',
+        short_name: 'CMCHS',
         description: 'Team weekly location scheduler',
         theme_color: '#111111',
         background_color: '#ffffff',

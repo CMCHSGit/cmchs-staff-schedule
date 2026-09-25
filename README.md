@@ -1,4 +1,4 @@
-# Where This Week — Setup Guide
+# CMCHS Staff Schedule — Setup Guide
 
 A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 
@@ -31,7 +31,7 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 > This lets your company's Microsoft accounts sign in.
 
 1. Go to [Azure Portal](https://portal.azure.com) → **Entra ID** → **App registrations** → New registration
-2. Name: `Where This Week`
+2. Name: `CMCHS Staff Schedule`
 3. Supported account types: **Accounts in this organizational directory only** (single tenant)
 4. Redirect URI: `https://your-project.firebaseapp.com/__/auth/handler` (Web platform)
    - Also add `http://localhost:5173/__/auth/handler` for local dev
@@ -45,7 +45,7 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 1. Sign up at [resend.com](https://resend.com) — free tier is plenty
 2. Add and verify your company domain (follow their DNS instructions)
 3. Create an API key → `RESEND_API_KEY`
-4. Set `RESEND_FROM` to something like `Where This Week <noreply@yourcompany.com>`
+4. Set `RESEND_FROM` to something like `CMCHS Staff Schedule <noreply@yourcompany.com>`
 
 ---
 

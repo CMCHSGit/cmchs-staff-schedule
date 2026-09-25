@@ -33,7 +33,7 @@ const messaging = firebase.messaging()
 
 messaging.onBackgroundMessage((payload) => {
   const { title, body } = payload.notification || {}
-  self.registration.showNotification(title || 'Where This Week', {
+  self.registration.showNotification(title || 'CMCHS Staff Schedule', {
     body,
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
