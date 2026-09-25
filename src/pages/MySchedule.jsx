@@ -22,6 +22,7 @@ export default function MySchedule() {
   const [comments,    setComments]    = useState('')
   const [savedAt,     setSavedAt]     = useState(null)
   const [locations,   setLocations]   = useState([])
+  const [pendingLocations, setPendingLocations] = useState([]) // typed this session, not yet in Firestore
   const [loading,     setLoading]     = useState(true)
   const [saving,      setSaving]      = useState(false)
   const [toast,       setToast]       = useState(null)
@@ -110,25 +111,30 @@ export default function MySchedule() {
   const quickFills = quickFillsForTeam(team, locations)
 
   function registerNewLocation(name) {
-    setLocations(prev => prev.some(l => l.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name])
+    const isKnown = l => l.toLowerCase() === name.toLowerCase()
+    setLocations(prev => prev.some(isKnown) ? prev : [...prev, name])
+    setPendingLocations(prev => prev.some(isKnown) ? prev : [...prev, name])
   }
 
-  /** Any location someone typed that isn't a known option yet becomes one for everyone. */
-  async function persistNewLocations(dayLocations) {
-    const known = new Set(locations.map(l => l.toLowerCase()))
-    const fresh = [...new Set(dayLocations.filter(Boolean))].filter(l => !known.has(l.toLowerCase()))
-    if (fresh.length === 0) return
-    await Promise.all(fresh.map(name => addDoc(collection(db, 'locations'), {
-      name, order: Date.now(), active: true, createdAt: serverTimestamp(),
-    })))
-    setLocations(prev => [...prev, ...fresh])
+  /** Anything typed this session that isn't in Firestore yet becomes a shared option for everyone. */
+  async function persistPendingLocations() {
+    if (pendingLocations.length === 0) return
+    try {
+      await Promise.all(pendingLocations.map(name => addDoc(collection(db, 'locations'), {
+        name, order: Date.now(), active: true, createdAt: serverTimestamp(),
+      })))
+      setPendingLocations([])
+    } catch (e) {
+      // Don't let a failure to register a new location block saving the actual schedule.
+      console.error('Failed to save new location(s):', e)
+    }
   }
 
   async function saveSchedule() {
     if (!user) return
     setSaving(true)
     try {
-      await persistNewLocations(schedule.map(d => d.location))
+      await persistPendingLocations()
       const ref = doc(db, 'schedules', scheduleId(weekStart, user.uid))
       await setDoc(ref, {
         uid:         user.uid,
