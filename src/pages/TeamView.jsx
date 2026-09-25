@@ -201,11 +201,5 @@ function UserRow({ user, schedule }) {
 function LocCell({ day }) {
   const label = dayLabel(day)
   const cls = locClass(day?.onCall ? `${dayLocation(day)} on call` : dayLocation(day))
-  return <span className={`loc ${cls}`} title={label}>{abbrev(label)}</span>
-}
-
-function abbrev(val) {
-  if (!val) return '—'
-  if (val.length <= 8) return val
-  return val.split(/[\s\/]/).map(w => w[0]).join('').toUpperCase().slice(0, 4)
+  return <span className={`loc ${cls}`} title={label}>{label || '—'}</span>
 }
