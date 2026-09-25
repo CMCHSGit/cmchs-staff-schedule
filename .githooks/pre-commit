@@ -1,0 +1,10 @@
+#!/bin/sh
+# Auto-bump APP_VERSION in src/version.js on every commit, so it's always
+# visible (Admin page footer) whether a browser tab is running the latest
+# code or a stale cached copy. See .githooks/bump-version.cjs. Requires
+# `git config core.hooksPath .githooks` (run once per clone) to be active.
+if ! git diff --cached --quiet; then
+  repo_root="$(git rev-parse --show-toplevel)"
+  node "$repo_root/.githooks/bump-version.cjs" || exit 1
+  git add src/version.js
+fi

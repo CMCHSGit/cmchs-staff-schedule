@@ -7,6 +7,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import Toast from '../components/Toast'
 import { TEAMS } from '../utils/teams'
+import { APP_VERSION } from '../version'
 
 export default function Admin() {
   const { profile } = useAuth()
@@ -46,6 +47,10 @@ export default function Admin() {
 
       {tab === 'locations' && <LocationsTab />}
       {tab === 'users'     && <UsersTab />}
+
+      <p className="text-sm text-muted" style={{ textAlign: 'center', padding: '24px 16px' }}>
+        CMCHS Staff Schedule v{APP_VERSION}
+      </p>
     </>
   )
 }
