@@ -358,7 +358,7 @@ select:focus { outline: none; border-color: var(--text); }
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--border-2);
-  background: var(--bg-2);
+  background-color: var(--bg-2);
   color: var(--text);
   font-family: inherit;
 }
