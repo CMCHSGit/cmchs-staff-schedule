@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db, microsoftProvider } from '../firebase'
@@ -9,10 +9,12 @@ export function AuthProvider({ children }) {
   const [user,         setUser]         = useState(undefined) // undefined = loading auth
   const [profile,      setProfile]      = useState(null)
   const [profileReady, setProfileReady] = useState(false)   // false until Firestore profile loaded
+  const loadedUidRef = useRef(null) // whose profile we've already fetched this session
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
+        loadedUidRef.current = null
         setUser(null)
         setProfile(null)
         setProfileReady(true)
@@ -20,6 +22,16 @@ export function AuthProvider({ children }) {
       }
 
       setUser(firebaseUser)
+
+      // onAuthStateChanged also fires on background token refreshes and
+      // multi-tab sync, not just real sign-ins — re-fetching the profile
+      // (and re-showing the full-page spinner) every time made the app
+      // feel randomly slow. Only refetch for an actual new sign-in.
+      if (loadedUidRef.current === firebaseUser.uid) {
+        setProfileReady(true)
+        return
+      }
+      loadedUidRef.current = firebaseUser.uid
       setProfileReady(false)
 
       const ref = doc(db, 'users', firebaseUser.uid)
