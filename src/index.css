@@ -145,10 +145,9 @@ html, body, #root {
   padding-right: 28px;
 }
 .combobox-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  /* top/left/width are set inline (LocationCombobox.jsx) since this list is
+     portaled to document.body, positioned to line up with its input. */
+  position: fixed;
   z-index: 60;
   background: var(--bg);
   border: 0.5px solid var(--border-2);
