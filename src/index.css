@@ -118,7 +118,9 @@ html, body, #root {
   background: var(--bg);
   border: 0.5px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+  /* Not overflow:hidden — nothing inside currently needs corner-clipping,
+     and the location combobox's dropdown needs to render past this card's
+     edge without being cut off. */
   margin: 0 16px 10px;
 }
 .card-header {
@@ -170,17 +172,18 @@ html, body, #root {
 .combobox-input.loc-nonwork { background-color: var(--nonwork-bg); }
 .combobox-input.loc-special { background-color: var(--special-bg); }
 .combobox-list {
-  /* top/left/width are set inline (LocationCombobox.jsx) since this list is
-     portaled to document.body, positioned to line up with its input. */
-  position: fixed;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
   z-index: 60;
   background: var(--bg);
   border: 0.5px solid var(--border-2);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  /* Capped to roughly one day-card's height, so an open list can't reach
-     down over the next day's card — scrolls internally past ~4 options. */
-  max-height: 150px;
+  /* Kept short — the gap to the next day's card is small, so this trades
+     off showing every option at once for not covering much of it. */
+  max-height: 120px;
   overflow-y: auto;
   list-style: none;
 }
