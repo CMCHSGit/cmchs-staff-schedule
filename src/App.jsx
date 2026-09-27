@@ -57,16 +57,16 @@ function BottomNav() {
 
   return (
     <nav className="bottom-nav" aria-label="Main navigation">
-      <NavLink to="/" end className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>
+      <NavLink to="/" end className={({ isActive }) => `nav-tab nav-week${isActive ? ' active' : ''}`}>
         <CalIcon />
         My week
       </NavLink>
-      <NavLink to="/team" className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>
+      <NavLink to="/team" className={({ isActive }) => `nav-tab nav-team${isActive ? ' active' : ''}`}>
         <TeamIcon />
         Team
       </NavLink>
       {profile?.role === 'admin' && (
-        <NavLink to="/admin" className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>
+        <NavLink to="/admin" className={({ isActive }) => `nav-tab nav-admin${isActive ? ' active' : ''}`}>
           <SettingsIcon />
           Admin
         </NavLink>

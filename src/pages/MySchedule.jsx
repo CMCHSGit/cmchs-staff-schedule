@@ -173,7 +173,7 @@ export default function MySchedule() {
     <>
       <div className="topbar">
         <div>
-          <div className="topbar-title">My schedule</div>
+          <div className="topbar-title" style={{ color: 'var(--week-color)' }}>My schedule</div>
           <div className="topbar-sub">
             {team ? `${team} team` : 'Set your team on first visit'}
             {teamCfg?.hint && <> · {teamCfg.hint}</>}

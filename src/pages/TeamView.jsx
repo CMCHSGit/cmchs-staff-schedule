@@ -73,7 +73,7 @@ export default function TeamView() {
     <>
       <div className="topbar">
         <div>
-          <div className="topbar-title">Team view</div>
+          <div className="topbar-title" style={{ color: 'var(--team-color)' }}>Team view</div>
           <div className="topbar-sub">
             {myTeam && !isAdmin ? `${myTeam} team` : 'All teams'}
             {' · '}

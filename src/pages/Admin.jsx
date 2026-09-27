@@ -24,7 +24,7 @@ export default function Admin() {
   return (
     <>
       <div className="topbar">
-        <div className="topbar-title">Admin</div>
+        <div className="topbar-title" style={{ color: 'var(--admin-color)' }}>Admin</div>
       </div>
 
       <div style={{ display: 'flex', borderBottom: '0.5px solid var(--border)' }}>
@@ -34,9 +34,9 @@ export default function Admin() {
             onClick={() => setTab(t)}
             style={{
               flex: 1, padding: '10px 0', fontSize: 14, background: 'none',
-              border: 'none', cursor: 'pointer', color: tab === t ? 'var(--text)' : 'var(--text-3)',
+              border: 'none', cursor: 'pointer', color: tab === t ? 'var(--admin-color)' : 'var(--text-3)',
               fontWeight: tab === t ? 500 : 400,
-              borderBottom: tab === t ? '2px solid var(--text)' : '2px solid transparent',
+              borderBottom: tab === t ? '2px solid var(--admin-color)' : '2px solid transparent',
               textTransform: 'capitalize', fontFamily: 'inherit'
             }}
           >

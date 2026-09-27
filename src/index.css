@@ -18,6 +18,12 @@
   --nonwork-text: #6b7280;
   --special-bg:  #fef9c3;
   --special-text: #854d0e;
+  /* Per-section accents, sampled from the Connected Health logo — used for
+     nav/title identity only, kept separate from Team view's meaning-carrying
+     location colors above so the two systems never collide. */
+  --week-color:  #F5821F;
+  --team-color:  #5B9130;
+  --admin-color: #7C6FC4;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -103,6 +109,9 @@ html, body, #root {
 }
 .nav-tab.active { color: var(--text); }
 .nav-tab svg    { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nav-week.active  { color: var(--week-color); }
+.nav-team.active  { color: var(--team-color); }
+.nav-admin.active { color: var(--admin-color); }
 
 /* ── Cards ── */
 .card {
@@ -451,7 +460,10 @@ select:focus { outline: none; border-color: var(--text); }
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   }
   .nav-tab svg { width: 18px; height: 18px; }
-  .nav-tab.active { background: var(--bg-2); }
+  .nav-tab.active { background: var(--bg-2); border-bottom: 3px solid transparent; }
+  .nav-week.active  { border-bottom-color: var(--week-color); }
+  .nav-team.active  { border-bottom-color: var(--team-color); }
+  .nav-admin.active { border-bottom-color: var(--admin-color); }
 
   /* Day-by-day schedule stays a comfortable reading width even though the
      shell is wide, instead of stretching single-column cards edge to edge. */
