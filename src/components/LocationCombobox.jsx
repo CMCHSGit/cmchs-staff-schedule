@@ -17,11 +17,9 @@ export default function LocationCombobox({ value, options, onChange, onNewValue,
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const [rect, setRect] = useState(null)
-  const blurTimer = useRef(null)
   const inputRef = useRef(null)
 
   useEffect(() => setText(value || ''), [value])
-  useEffect(() => () => clearTimeout(blurTimer.current), [])
 
   // Track the input's on-screen position while open, so the portaled list
   // stays lined up with it even as the page scrolls.
@@ -55,8 +53,13 @@ export default function LocationCombobox({ value, options, onChange, onNewValue,
   }
 
   function handleBlur() {
-    // Delay so a suggestion's onMouseDown still fires before we close/commit.
-    blurTimer.current = setTimeout(() => commit(text), 150)
+    // Commits synchronously — no delay needed. A suggestion click uses
+    // onMouseDown, which always fires before the blur it triggers (on both
+    // mouse and touch), so the suggestion is already committed by the time
+    // this runs. A delay here previously raced against anything that read
+    // this field's state right after a blur, e.g. clicking Save immediately
+    // after typing without tabbing away first.
+    commit(text)
   }
 
   function handleKeyDown(e) {

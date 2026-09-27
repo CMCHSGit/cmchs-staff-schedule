@@ -115,7 +115,7 @@ export default function MySchedule() {
     ]),
   ]
 
-  const quickFills = quickFillsForTeam(team, locations)
+  const quickFills = quickFillsForTeam(team)
 
   function registerNewLocation(name) {
     const isKnown = l => l.toLowerCase() === name.toLowerCase()
