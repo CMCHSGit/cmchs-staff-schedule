@@ -64,6 +64,16 @@ html, body, #root {
   overflow-y: auto;
 }
 
+/* ── Pull to refresh ── */
+.ptr-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-3);
+}
+.ptr-arrow { flex-shrink: 0; }
+
 /* ── Top bar ── */
 .topbar {
   position: sticky;

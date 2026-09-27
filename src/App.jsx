@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login      from './pages/Login'
@@ -5,6 +6,7 @@ import MySchedule from './pages/MySchedule'
 import TeamView   from './pages/TeamView'
 import Admin      from './pages/Admin'
 import TeamOnboarding from './components/TeamOnboarding'
+import PullToRefresh  from './components/PullToRefresh'
 
 export default function App() {
   return (
@@ -18,6 +20,7 @@ export default function App() {
 
 function AppRoutes() {
   const { user, profileReady } = useAuth()
+  const [refreshKey, setRefreshKey] = useState(0)
 
   if (user === undefined || (user && !profileReady)) {
     return (
@@ -35,17 +38,25 @@ function AppRoutes() {
     )
   }
 
+  async function handleRefresh() {
+    // Remounting the active page re-runs its own data-loading effects from
+    // scratch — same as navigating away and back, just without leaving the
+    // page. The short delay keeps the pull indicator from just flashing shut.
+    await new Promise(r => setTimeout(r, 400))
+    setRefreshKey(k => k + 1)
+  }
+
   return (
     <div className="app-shell">
       <TeamOnboarding />
-      <div className="app-content">
-        <Routes>
+      <PullToRefresh onRefresh={handleRefresh}>
+        <Routes key={refreshKey}>
           <Route path="/"      element={<MySchedule />} />
           <Route path="/team"  element={<TeamView />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*"      element={<Navigate to="/" replace />} />
         </Routes>
-      </div>
+      </PullToRefresh>
 
       <BottomNav />
     </div>
