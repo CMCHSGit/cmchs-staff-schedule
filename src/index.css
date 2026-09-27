@@ -190,7 +190,7 @@ html, body, #root {
 /* ── Selects ── */
 select {
   flex: 1;
-  font-size: 14px;
+  font-size: 16px;
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--border-2);
@@ -368,7 +368,9 @@ select:focus { outline: none; border-color: var(--text); }
 
 .input {
   width: 100%;
-  font-size: 14px;
+  /* iOS Safari zooms the page in when focusing a text field with a
+     computed font-size under 16px — this is the threshold, not a style choice. */
+  font-size: 16px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--border-2);

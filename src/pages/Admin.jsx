@@ -215,7 +215,7 @@ function UsersTab() {
                 <select
                   value={u.team || ''}
                   onChange={e => { updateUser(u.uid, 'team', e.target.value || null); showToast('Saved') }}
-                  style={{ width: 120, fontSize: 13 }}
+                  style={{ width: 132, fontSize: 16 }}
                 >
                   <option value="">No team</option>
                   {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -223,7 +223,7 @@ function UsersTab() {
                 <select
                   value={u.role || 'user'}
                   onChange={e => { updateUser(u.uid, 'role', e.target.value); showToast('Saved') }}
-                  style={{ width: 90, fontSize: 13 }}
+                  style={{ width: 100, fontSize: 16 }}
                 >
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
