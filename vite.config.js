@@ -16,7 +16,7 @@ export default defineConfig({
       includeAssets: ['icons/*.png'],
       manifest: {
         name: 'CMCHS Staff Schedule',
-        short_name: 'CMCHS',
+        short_name: 'CMCHS Staff Schedule',
         description: 'Team weekly location scheduler',
         theme_color: '#111111',
         background_color: '#ffffff',
