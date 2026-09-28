@@ -60,15 +60,19 @@ edits, it only ever fills in from the app's side. Skip this whole section if tha
 doesn't exist for your deployment.
 
 1. In the same Azure app registration from step 2 — **API permissions** → Add a permission →
-   **Microsoft Graph** → **Application permissions** → `Files.ReadWrite` → have an admin grant
-   consent
+   **Microsoft Graph** → **Application permissions** → `Files.ReadWrite.All` → have an admin
+   grant consent (broader than strictly necessary — grants every site in the tenant, not just
+   this one file. The narrower alternative is `Sites.Selected` + a separate per-site grant)
 2. **Certificates & secrets** → New client secret → copy the value into `AZURE_CLIENT_SECRET`
    (a separate secret from whichever one Firebase Auth's sign-in uses — keeps them
    independently revocable)
-3. Resolve the SharePoint site ID via Graph Explorer (or any authenticated Graph call):
+3. Resolve the SharePoint site ID via [Graph Explorer](https://developer.microsoft.com/graph/graph-explorer)
+   (sign in with a real account first, not the sample one it defaults to):
    `GET https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-path}` → copy the
    returned `id` into `SHAREPOINT_SITE_ID`
-4. Set `EXCEL_FILE_PATH` to that file's path within the site's default document library
+4. Set `EXCEL_ITEM_ID` to the file's own item ID — open it in SharePoint, copy its share link,
+   and pull the value out of the `sourcedoc={...}` parameter (strip the curly braces). More
+   reliable than a folder path, since it still works even if the file gets renamed or moved.
 5. In the app, **Admin → Users**, set each person's **Excel name** — the first name exactly as
    it appears in that sheet's Name column. Anyone left blank is simply skipped (not an error)
 
@@ -91,7 +95,7 @@ npm run dev
 3. Add all env vars from `.env.example` under **Settings → Environment Variables**
    - The `VITE_*` vars go to **Production + Preview + Development**
    - The server-only vars (`FIREBASE_*`, `RESEND_*`, `CRON_SECRET`, `AZURE_CLIENT_*`,
-     `SHAREPOINT_SITE_ID`, `EXCEL_FILE_PATH`) go to **Production** only
+     `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID`) go to **Production** only
 4. Deploy
 
 The cron job in `vercel.json` runs every Wednesday at 20:00 UTC (= Thursday 08:00 NZT — the

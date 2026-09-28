@@ -18,8 +18,10 @@
  *   SHAREPOINT_SITE_ID       e.g. "cassmedical.sharepoint.com,<site-guid>,<web-guid>"
  *                            — resolve via Graph Explorer:
  *                            GET https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-path}
- *   EXCEL_FILE_PATH          path to the .xlsx within that site's default document
- *                            library, e.g. "CMCHS Files/Admin/Cass Admin/Staff Schedule/CMCHS Staff Schedule 2024.xlsx"
+ *   EXCEL_ITEM_ID            the file's own permanent item ID (not a path) — found in its
+ *                            SharePoint share link's `sourcedoc={...}` parameter (strip the
+ *                            curly braces). Survives the file being renamed or moved to a
+ *                            different folder within the same site, unlike a path lookup.
  */
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app'
@@ -39,7 +41,7 @@ function initFirebase() {
 }
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
-const DRIVE_ROOT = `${GRAPH}/sites/${process.env.SHAREPOINT_SITE_ID}/drive/root:/${encodeURI(process.env.EXCEL_FILE_PATH || '')}:`
+const DRIVE_ROOT = `${GRAPH}/sites/${process.env.SHAREPOINT_SITE_ID}/drive/items/${process.env.EXCEL_ITEM_ID}`
 
 async function getGraphToken() {
   const tenant = process.env.VITE_AZURE_TENANT_ID

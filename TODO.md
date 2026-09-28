@@ -72,9 +72,18 @@ Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedul
       consent for Cass Medical Limited" (no need to re-add the permission, it's already
       there). Client secret not created yet either — do that at the same time (Certificates
       & secrets → New client secret → copy the Value into `AZURE_CLIENT_SECRET`).
-- [ ] **Resolve `SHAREPOINT_SITE_ID`** via Graph Explorer — confirm this file is actually on a
-      SharePoint site (not a personal OneDrive) and get its site ID.
-- [ ] Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_FILE_PATH` in Vercel env vars.
+- [x] **`SHAREPOINT_SITE_ID` resolved (2026-09-28)** via Graph Explorer — confirmed this file
+      is on a SharePoint site (`cassmedical.sharepoint.com`, site `CassCHSDocument`), not a
+      personal OneDrive. Real value isn't written here (public repo) — Peter has it, goes
+      straight into Vercel's env vars, not this file.
+- [x] **Switched to item-ID addressing (2026-09-28)**: rather than guessing the file's path
+      within the document library, `EXCEL_ITEM_ID` (the file's own permanent ID, pulled from
+      its SharePoint share link's `sourcedoc={...}` parameter) is more robust — survives the
+      file being renamed/moved. `api/sync-excel.js`/`.env.example`/README updated to match;
+      `EXCEL_FILE_PATH` no longer exists, superseded by this.
+- [ ] Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID` in Vercel env vars (values
+      already in hand from the above — just needs typing into Vercel, and can happen before
+      the admin-consent step below, since these three don't need it).
 - [ ] Set `excelName` for at least one real test user in Admin → Users.
 - [ ] End-to-end test: save that user's schedule for the *current* week and confirm the Excel
       file actually updates; also test a week with no existing sheet yet (should skip
