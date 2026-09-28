@@ -5,14 +5,19 @@
  *
  * Colours are the Excel schedule's own fills, as carried into the v2 design —
  * they carry meaning for logistics, so keep them exact rather than
- * re-tinting them to the brand palette.
+ * re-tinting them to the brand palette — in dark mode too. Only the plain
+ * (white in Excel) statuses follow the theme, via PLAIN.
  */
+export const PLAIN = 'var(--cell-plain)'
+/** Text on an Excel fill is always dark, whatever the theme. */
+export const INK = '#1d1d1d'
+
 export const STATUS = {
   calls:    { label: 'Customer Calls',  bg: '#FFFF00' },
-  office:   { label: 'Cass Office',     bg: '#ffffff' },
-  site:     { label: 'On site',         bg: '#ffffff' },
-  remote:   { label: 'Remote Support',  bg: '#ffffff' },
-  wfh:      { label: 'Work from Home',  bg: '#ffffff' },
+  office:   { label: 'Cass Office',     bg: PLAIN },
+  site:     { label: 'On site',         bg: PLAIN },
+  remote:   { label: 'Remote Support',  bg: PLAIN },
+  wfh:      { label: 'Work from Home',  bg: PLAIN },
   training: { label: 'Training',        bg: '#e9f2da' },
   leave:    { label: 'Leave',           bg: '#FFC000' },
   nwd:      { label: 'Non-Working Day', bg: '#D9D9D9' },
@@ -26,7 +31,7 @@ export const ONCALL_BG = '#FF7C80'
 export const STATUS_ORDER = ['calls', 'office', 'site', 'remote', 'wfh', 'training', 'leave', 'nwd', 'holiday']
 
 export const LEGEND = [
-  { label: 'Office / site / remote / WFH', bg: '#ffffff' },
+  { label: 'Office / site / remote / WFH', bg: PLAIN },
   { label: 'Customer Calls', bg: STATUS.calls.bg },
   { label: 'On call (weekly)', bg: ONCALL_BG },
   { label: 'Leave', bg: STATUS.leave.bg },
@@ -68,7 +73,9 @@ export function describeDay(day, holidayName = '') {
     status,
     calls,
     empty: !status,
-    bg: status ? STATUS[status].bg : '#ffffff',
+    bg: status ? STATUS[status].bg : PLAIN,
+    fg: status && STATUS[status].bg !== PLAIN ? INK : 'var(--text-strong)',
+    filled: !!status && STATUS[status].bg !== PLAIN,
     // Anything more specific than the status's own name, e.g. "Tauranga".
     note: status && noteSource && simplify(noteSource) !== simplify(STATUS[status].label) ? noteSource : '',
   }

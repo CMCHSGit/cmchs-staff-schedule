@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { Button, IconButton, Switch, Tag, Badge } from './ui'
 import LocationCombobox from './LocationCombobox'
-import { describeDay } from '../utils/status'
+import { describeDay, PLAIN, INK } from '../utils/status'
 import { STANDARD_QUICK_FILLS } from '../utils/teams'
 import { normalizeSchedule, weekDates, WEEK_DAYS, dayMonthYear } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
@@ -44,7 +44,7 @@ export default function EditDrawer({ person, name, isSelf, weekStart, dayIdx, sc
     }
   }
 
-  const tint = describeDay({ location, onCall: calls }).bg
+  const { bg: tint, filled } = describeDay({ location, onCall: calls })
   const options = [...new Set([...locations, ...days.map(d => d.location).filter(Boolean)])]
 
   return (
@@ -63,14 +63,14 @@ export default function EditDrawer({ person, name, isSelf, weekStart, dayIdx, sc
           <IconButton label="Close" onClick={onClose}><X size={20} /></IconButton>
         </div>
 
-        <div className="drawer-section" style={{ background: tint === '#ffffff' ? 'var(--surface-subtle)' : tint }}>
+        <div className="drawer-section" style={{ background: filled ? tint : 'var(--surface-subtle)', ...(filled && { color: INK }) }}>
           <label className="field-label" htmlFor="drawer-location">{isSelf ? 'Where you’ll be' : `Where ${name} will be`}</label>
           <LocationCombobox
             id="drawer-location"
             value={location}
             options={options}
             onChange={setLocation}
-            tint="#ffffff"
+            tint={PLAIN}
             placeholder={holiday ? `${holiday} — or type where` : 'Type or pick a location…'}
           />
           <div className="quick-picks">

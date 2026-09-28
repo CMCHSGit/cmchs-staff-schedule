@@ -4,7 +4,7 @@ import { Phone } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, weekStartOf, weekDates, todayIndex, fromISO, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
-import { describeDay, STATUS, STATUS_ORDER } from '../utils/status'
+import { describeDay, STATUS, STATUS_ORDER, PLAIN, INK } from '../utils/status'
 import { groupByTeam, teamLabel } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { weekConflicts, onLeave } from '../utils/weekInsights'
@@ -58,7 +58,8 @@ export default function DayView() {
   const groups = [...STATUS_ORDER, 'none'].filter(k => byStatus[k]).map(k => ({
     key: k,
     label: k === 'none' ? 'No entry' : STATUS[k].label,
-    swatch: k === 'none' || STATUS[k].bg === '#ffffff' ? 'var(--surface-subtle)' : STATUS[k].bg,
+    filled: k !== 'none' && STATUS[k].bg !== PLAIN,
+    swatch: k === 'none' || STATUS[k].bg === PLAIN ? 'var(--surface-subtle)' : STATUS[k].bg,
     people: byStatus[k],
   }))
   const count = k => (byStatus[k] || []).length
@@ -94,7 +95,7 @@ export default function DayView() {
         <div className="day-groups">
           {groups.map(g => (
             <div key={g.key} className="day-group">
-              <div className="day-group-head" style={{ background: g.swatch }}>
+              <div className="day-group-head" style={{ background: g.swatch, color: g.filled ? INK : 'var(--text-strong)' }}>
                 <span className="day-group-label">{g.label}</span>
                 <span className="day-group-count">{g.people.length}</span>
               </div>

@@ -3,7 +3,7 @@ import { Printer, Copy } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getCurrentWeekStart, addDaysISO, weekDates, todayIndex, normalizeSchedule, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
-import { describeDay } from '../utils/status'
+import { describeDay, INK } from '../utils/status'
 import { groupByTeam, doesCustomerCalls } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { weekConflicts, onLeave } from '../utils/weekInsights'
@@ -185,7 +185,7 @@ export default function TeamWeek() {
                           key={i}
                           type={canEdit(u) ? 'button' : undefined}
                           className="wk-cell"
-                          style={{ background: c.bg }}
+                          style={{ background: c.bg, ...(c.filled && { color: INK }) }}
                           title={c.text || undefined}
                           onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx: i }) : undefined}
                         >
@@ -216,7 +216,7 @@ export default function TeamWeek() {
                       onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx }) : undefined}
                     >
                       <span className={`wkm-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>{nameLabel(u)}</span>
-                      <span className={`wkm-day${c.empty ? ' blank' : ''}`} style={{ background: c.bg }}>{c.text || 'No entry'}</span>
+                      <span className={`wkm-day${c.empty ? ' blank' : ''}`} style={{ background: c.bg, ...(c.filled && { color: INK }) }}>{c.text || 'No entry'}</span>
                     </Tagname>
                   )
                 })}

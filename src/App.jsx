@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
-import { CalendarCheck, CalendarDays, MapPin, CalendarRange, Phone, Settings } from 'lucide-react'
+import { CalendarCheck, CalendarDays, MapPin, CalendarRange, Phone, Settings, Moon, Sun } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login         from './pages/Login'
 import MySchedule    from './pages/MySchedule'
@@ -11,7 +11,8 @@ import OnCall        from './pages/OnCall'
 import Admin         from './pages/Admin'
 import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
-import { Logo, StripeRule, Spinner } from './components/ui'
+import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
+import { useTheme } from './utils/theme'
 
 // Short labels for the phone's bottom bar, fuller ones for desktop tabs.
 const VIEWS = [
@@ -78,11 +79,12 @@ function AppRoutes() {
 
 function AppHeader() {
   const { profile } = useAuth()
+  const [theme, toggleTheme] = useTheme()
   return (
     <header className="app-header">
       <div className="app-header-row">
         <NavLink to="/" className="app-brand" aria-label="Staff schedule — my week">
-          <span className="logo-full"><Logo width={124} /></span>
+          <span className="logo-full logo-plate"><Logo width={124} /></span>
           <span className="brand-divider" />
           <span className="logo-mark"><Logo variant="mark" width={32} /></span>
           <span className="app-title">Staff schedule</span>
@@ -94,6 +96,9 @@ function AppHeader() {
             </NavLink>
           ))}
         </nav>
+        <IconButton className="theme-toggle" label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </IconButton>
         {profile?.role === 'admin' && (
           <NavLink to="/admin" className={({ isActive }) => `header-admin${isActive ? ' active' : ''}`} aria-label="Admin">
             <Settings size={20} aria-hidden="true" />

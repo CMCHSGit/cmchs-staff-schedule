@@ -212,7 +212,7 @@ export default function MySchedule() {
           {WEEK_DAYS.map((day, i) => {
             const value = schedule[i]?.location ?? ''
             const onCall = schedule[i]?.onCall ?? false
-            const { bg } = describeDay({ location: value, onCall })
+            const { bg, fg } = describeDay({ location: value, onCall })
             return (
               <div className="card day-card" key={day}>
                 <div className="day-card-head">
@@ -226,6 +226,7 @@ export default function MySchedule() {
                   onChange={val => updateDay(i, { location: val })}
                   onNewValue={registerNewLocation}
                   tint={bg}
+                  tintFg={fg}
                   placeholder={holidays[i] ? `${holidays[i]} — or type where you’ll be` : undefined}
                 />
                 {showCalls && (

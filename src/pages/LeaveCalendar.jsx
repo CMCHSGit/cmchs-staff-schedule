@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { toISO, weekStartOf, addDaysISO, fromISO, WEEK_DAYS, DAY_SHORT, MONTHS_LONG } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
-import { describeDay, STATUS } from '../utils/status'
+import { describeDay, STATUS, INK } from '../utils/status'
 import { shortNames } from '../utils/names'
 import { useUsers, useSchedules } from '../hooks/useScheduleData'
 import { IconButton, Loading } from '../components/ui'
@@ -74,7 +74,7 @@ export default function LeaveCalendar() {
                 key={d.iso}
                 type="button"
                 className={`month-cell${d.inMonth ? '' : ' outside'}`}
-                style={d.holiday ? { background: STATUS.holiday.bg } : undefined}
+                style={d.holiday ? { background: STATUS.holiday.bg, color: INK } : undefined}
                 onClick={() => open(d.iso)}
               >
                 <span className={`month-num${d.iso === today ? ' today' : ''}`}>{fromISO(d.iso).getDate()}</span>
@@ -89,7 +89,7 @@ export default function LeaveCalendar() {
 
           <div className="month-agenda">
             {agenda.map(d => (
-              <button key={d.iso} type="button" className="agenda-row" style={d.holiday ? { background: STATUS.holiday.bg } : undefined} onClick={() => open(d.iso)}>
+              <button key={d.iso} type="button" className="agenda-row" style={d.holiday ? { background: STATUS.holiday.bg, color: INK } : undefined} onClick={() => open(d.iso)}>
                 <span className="agenda-date">
                   <span className="agenda-dow">{DAY_SHORT[d.dow]}</span>
                   <span className="agenda-num">{fromISO(d.iso).getDate()}</span>
