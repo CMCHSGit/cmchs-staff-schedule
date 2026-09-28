@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, setDoc, updateDoc,
+  collection, getDocs, getDoc, addDoc, deleteDoc, doc, setDoc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -168,6 +168,7 @@ function UsersTab() {
   const [toast,      setToast]      = useState(null)
   const [rosterText, setRosterText] = useState('')
   const [showImport, setShowImport] = useState(false)
+  const [importing,  setImporting]  = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -220,6 +221,56 @@ function UsersTab() {
     load()
   }
 
+  /** Prefers an exact excelName match, falling back to first-name only when unambiguous. */
+  function findUserId(name) {
+    const target = name.trim().toLowerCase()
+    const exact = users.find(u => (u.excelName || '').trim().toLowerCase() === target)
+    if (exact) return exact.uid
+    const firstName = target.split(/\s+/)[0]
+    const candidates = users.filter(u => (u.displayName || '').trim().split(/\s+/)[0]?.toLowerCase() === firstName)
+    return candidates.length === 1 ? candidates[0].uid : null
+  }
+
+  /**
+   * Backfills past weeks from a { weekStart: [{name, team, days, comments}] }
+   * JSON file (pulled from the Excel schedule) — a file upload rather than
+   * pasted/hardcoded, since this is real staff schedule data. Never
+   * overwrites a schedule that's already there (e.g. from someone actually
+   * using the app), only fills in ones that don't exist yet.
+   */
+  async function importScheduleHistory(file) {
+    const text = await file.text()
+    let data
+    try { data = JSON.parse(text) } catch { showToast('Could not parse that file as JSON'); return }
+
+    setImporting(true)
+    let created = 0, skippedExisting = 0, unmatched = 0
+    for (const [weekStart, entries] of Object.entries(data)) {
+      for (const entry of entries) {
+        const uid = findUserId(entry.name)
+        if (!uid) { unmatched++; continue }
+        const scheduleRef = doc(db, 'schedules', `${weekStart}_${uid}`)
+        const existing = await getDoc(scheduleRef)
+        if (existing.exists()) { skippedExisting++; continue }
+        const user = users.find(u => u.uid === uid)
+        await setDoc(scheduleRef, {
+          uid,
+          displayName: user?.displayName || entry.name,
+          email:       user?.email || null,
+          team:        user?.team || entry.team || null,
+          weekStart,
+          days:        entry.days.map(location => ({ location: location || '', onCall: false })),
+          comments:    entry.comments || '',
+          submittedAt: serverTimestamp(),
+          importedFromExcel: true,
+        })
+        created++
+      }
+    }
+    setImporting(false)
+    showToast(`Imported ${created} schedules, skipped ${skippedExisting} existing, ${unmatched} unmatched names`)
+  }
+
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
@@ -262,6 +313,24 @@ function UsersTab() {
             </button>
           </div>
         )}
+      </div>
+
+      <div style={{ padding: '0 16px 16px' }}>
+        <label className="btn btn-sm" style={{ display: 'inline-flex' }}>
+          {importing ? 'Importing…' : 'Import schedule history (.json)'}
+          <input
+            type="file"
+            accept="application/json"
+            disabled={importing}
+            style={{ display: 'none' }}
+            onChange={e => { if (e.target.files[0]) importScheduleHistory(e.target.files[0]); e.target.value = '' }}
+          />
+        </label>
+        <p className="text-sm text-muted" style={{ marginTop: 6, lineHeight: 1.4 }}>
+          Backfills past weeks from an exported Excel schedule file. Matches each entry to an
+          existing person (by Excel name, or first name if unambiguous) and only fills in weeks
+          that don't already have a saved schedule — never overwrites one that's already there.
+        </p>
       </div>
 
       {loading ? (

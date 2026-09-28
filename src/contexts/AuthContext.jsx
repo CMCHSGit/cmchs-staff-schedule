@@ -12,6 +12,22 @@ function guessedEmails(fullName) {
 }
 
 /**
+ * Copies any schedules saved under a pending placeholder's made-up id onto
+ * the real uid claiming it, so admin-backfilled history doesn't become
+ * orphaned the moment the placeholder is deleted. The old copies are left
+ * in place rather than deleted (deleting them needs admin rights, which a
+ * brand-new sign-in doesn't have) — harmless, since nothing ever looks
+ * them up again once no user document references that placeholder id.
+ */
+async function transferSchedules(pendingId, realUid) {
+  const snap = await getDocs(query(collection(db, 'schedules'), where('uid', '==', pendingId)))
+  for (const scheduleDoc of snap.docs) {
+    const newId = scheduleDoc.id.replace(pendingId, realUid)
+    await setDoc(doc(db, 'schedules', newId), { ...scheduleDoc.data(), uid: realUid })
+  }
+}
+
+/**
  * Admin → Users can bulk-create "pending" placeholder profiles (team,
  * excelName) for staff who haven't signed in yet, keyed by a made-up id
  * rather than their eventual real uid (which doesn't exist until they do).
@@ -31,23 +47,24 @@ async function claimPendingProfile(firebaseUser) {
   const snap = await getDocs(query(collection(db, 'users'), where('pending', '==', true)))
   const pendingDocs = snap.docs
 
+  let claimed = null
   if (email) {
     const emailMatches = pendingDocs.filter(d => guessedEmails(d.data().displayName || '').includes(email))
-    if (emailMatches.length === 1) {
-      await deleteDoc(emailMatches[0].ref)
-      return emailMatches[0].data()
-    }
+    if (emailMatches.length === 1) claimed = emailMatches[0]
   }
+  if (!claimed && firstName) {
+    const nameMatches = pendingDocs.filter(d => {
+      const pendingFirst = (d.data().displayName || '').trim().split(/\s+/)[0]?.toLowerCase()
+      return pendingFirst === firstName
+    })
+    if (nameMatches.length === 1) claimed = nameMatches[0]
+  }
+  if (!claimed) return null
 
-  if (!firstName) return null
-  const nameMatches = pendingDocs.filter(d => {
-    const pendingFirst = (d.data().displayName || '').trim().split(/\s+/)[0]?.toLowerCase()
-    return pendingFirst === firstName
-  })
-  if (nameMatches.length !== 1) return null
-
-  await deleteDoc(nameMatches[0].ref)
-  return nameMatches[0].data()
+  const data = claimed.data()
+  await transferSchedules(claimed.id, firebaseUser.uid)
+  await deleteDoc(claimed.ref)
+  return data
 }
 
 const AuthContext = createContext(null)
