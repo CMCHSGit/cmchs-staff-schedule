@@ -33,12 +33,23 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Schedules — users read/write their own, all signed-in users read any (for team view)
+    // Schedules — everyone signed in can read (Team week, Day, Leave). People
+    // write their own; admins can write anyone's (filling in from Team week,
+    // "Copy last week", people who haven't signed in yet). A non-admin can
+    // never hand a schedule to someone else by changing its uid.
     match /schedules/{schedId} {
       allow read:  if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.uid == request.auth.uid;
+      allow create: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        (resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid) || isAdmin());
       allow delete: if isAdmin();
+    }
+
+    // Weekly on-call roster, one doc per week (id = the Monday). Everyone
+    // can see it; only admins assign it.
+    match /oncall/{weekStart} {
+      allow read:  if isSignedIn();
+      allow write: if isAdmin();
     }
   }
 }

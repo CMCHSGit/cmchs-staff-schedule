@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
-import { doc, getDoc, setDoc, addDoc, serverTimestamp, collection, getDocs, query, where } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
+import { Bell, Share, Phone, Info, CalendarClock } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, weekLabel, WEEK_DAYS, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
-import { getTeamConfig, quickFillsForTeam } from '../utils/teams'
+import { getCurrentWeekStart, weekDates, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
+import { holidayOn } from '../utils/holidays'
+import { describeDay } from '../utils/status'
+import { getTeamConfig, teamLabel, quickFillsForTeam, doesCustomerCalls } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
-import { locClass } from '../utils/locationColor'
+import { writeSchedule, syncToExcel, addNewLocations } from '../utils/scheduleStore'
+import { useLocations, useOnCall } from '../hooks/useScheduleData'
 import WeekNav from '../components/WeekNav'
-import Toast   from '../components/Toast'
+import Toast, { useToast } from '../components/Toast'
 import LocationCombobox from '../components/LocationCombobox'
-import Toggle  from '../components/Toggle'
-
-const MAX_WEEKS_AHEAD = 2
-const MAX_WEEKS_BACK  = 4
+import { Alert, Badge, Button, Switch, Tag, Loading, Spinner } from '../components/ui'
 
 export default function MySchedule() {
   const { user, profile } = useAuth()
@@ -22,22 +23,28 @@ export default function MySchedule() {
   const [weekOffset,  setWeekOffset]  = useState(0)
   const [schedule,    setSchedule]    = useState(() => emptySchedule())
   const [comments,    setComments]    = useState('')
-  const [savedAt,     setSavedAt]     = useState(null)
-  const [locations,   setLocations]   = useState([])
+  const [existing,    setExisting]    = useState(null)
+  const [locations,   setLocations]   = useLocations()
   const [pendingLocations, setPendingLocations] = useState([]) // typed this session, not yet in Firestore
   const [loading,     setLoading]     = useState(true)
   const [saving,      setSaving]      = useState(false)
-  const [toast,       setToast]       = useState(null)
+  const [nextWeekDue, setNextWeekDue] = useState(false)
+  const [toast,       showToast]      = useToast()
   const [pushEnabled, setPushEnabled] = useState(pushEnabledOnThisDevice)
   const [enablingPush, setEnablingPush] = useState(false)
 
   const weekStart = getCurrentWeekStart(weekOffset)
+  const dates = weekDates(weekStart)
+  const holidays = dates.map(holidayOn)
+  const { byWeek: oncall } = useOnCall([weekStart])
+  const onCallThisWeek = oncall[weekStart]?.uid === user?.uid
+  const showCalls = doesCustomerCalls(team) || schedule.some(d => d.onCall)
 
   useEffect(() => {
     let unsubscribe = () => {}
     onForegroundMessage(({ title, body }) => showToast(body || title || 'New reminder')).then(fn => { unsubscribe = fn })
     return () => unsubscribe()
-  }, [])
+  }, [showToast])
 
   async function handleEnablePush() {
     if (!user) return
@@ -45,65 +52,53 @@ export default function MySchedule() {
     try {
       await enablePush(user.uid)
       setPushEnabled(true)
-      showToast('Reminders on ✓')
+      showToast('Reminders are on.')
     } catch (e) {
-      showToast(e.message || 'Could not enable reminders')
+      showToast(e.message || 'Could not turn on reminders.')
     } finally {
       setEnablingPush(false)
     }
   }
 
-  useEffect(() => {
-    async function loadLocations() {
-      try {
-        // Sorted client-side rather than via orderBy('order') — combining an
-        // equality filter with a sort on a different field needs a composite
-        // Firestore index, which doesn't exist here, and the query fails
-        // silently (rejected promise, never caught) without one.
-        const q = query(collection(db, 'locations'), where('active', '==', true))
-        const snap = await getDocs(q)
-        const docs = snap.docs.map(d => d.data()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        setLocations(docs.map(d => d.name))
-      } catch (e) {
-        console.error('Failed to load locations:', e)
-      }
-    }
-    loadLocations()
-  }, [])
-
   const loadSchedule = useCallback(async () => {
     if (!user) return
     setLoading(true)
     try {
-      const ref  = doc(db, 'schedules', scheduleId(weekStart, user.uid))
-      const snap = await getDoc(ref)
+      const snap = await getDoc(doc(db, 'schedules', scheduleId(weekStart, user.uid)))
       if (snap.exists()) {
         const data = snap.data()
         setSchedule(normalizeSchedule(data.days))
         setComments(data.comments || '')
-        setSavedAt(data.submittedAt?.toDate())
+        setExisting({ ...data, submittedAt: data.submittedAt?.toDate() })
       } else {
         setSchedule(emptySchedule())
         setComments('')
-        setSavedAt(null)
+        setExisting(null)
       }
     } finally {
       setLoading(false)
     }
-  }, [user, weekStart, team])
+  }, [user, weekStart])
 
   useEffect(() => { loadSchedule() }, [loadSchedule])
 
+  // Thursday is when next week's schedule is due (and the reminder goes out) —
+  // on Thursday and Friday, nudge toward next week if it isn't filled in yet.
+  useEffect(() => {
+    const dow = new Date().getDay()
+    if (!user || weekOffset !== 0 || (dow !== 4 && dow !== 5)) { setNextWeekDue(false); return }
+    getDoc(doc(db, 'schedules', scheduleId(getCurrentWeekStart(1), user.uid)))
+      .then(snap => setNextWeekDue(!snap.exists() || !!snap.data().needsConfirm))
+      .catch(() => setNextWeekDue(false))
+  }, [user, weekOffset])
+
   function updateDay(dayIdx, patch) {
-    setSchedule(prev => {
-      const next = prev.map(d => ({ ...d }))
-      next[dayIdx] = { ...next[dayIdx], ...patch }
-      return next
-    })
+    setSchedule(prev => prev.map((d, i) => (i === dayIdx ? { ...d, ...patch } : d)))
   }
 
+  /** Public holidays are left alone — they already show as the holiday. */
   function fillAllDays(value) {
-    setSchedule(prev => prev.map(d => ({ ...d, location: value })))
+    setSchedule(prev => prev.map((d, i) => (holidays[i] ? d : { ...d, location: value })))
   }
 
   const locationOptions = [
@@ -115,205 +110,151 @@ export default function MySchedule() {
     ]),
   ]
 
-  const quickFills = quickFillsForTeam(team)
-
   function registerNewLocation(name) {
     const isKnown = l => l.toLowerCase() === name.toLowerCase()
     setLocations(prev => prev.some(isKnown) ? prev : [...prev, name])
     setPendingLocations(prev => prev.some(isKnown) ? prev : [...prev, name])
   }
 
-  /** Anything typed this session that isn't in Firestore yet becomes a shared option for everyone. */
-  async function persistPendingLocations() {
-    if (pendingLocations.length === 0) return
-    try {
-      await Promise.all(pendingLocations.map(name => addDoc(collection(db, 'locations'), {
-        name, order: Date.now(), active: true, createdAt: serverTimestamp(),
-      })))
-      setPendingLocations([])
-    } catch (e) {
-      // Don't let a failure to register a new location block saving the actual schedule.
-      console.error('Failed to save new location(s):', e)
-    }
-  }
-
-  /** Best-effort mirror into the company's existing Excel schedule. Never awaited by the caller. */
-  async function syncToExcel() {
-    try {
-      const idToken = await user.getIdToken()
-      await fetch('/api/sync-excel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ weekStart, days: schedule, comments: comments.trim() }),
-      })
-    } catch (e) {
-      console.error('Excel sync failed:', e)
-    }
-  }
-
   async function saveSchedule() {
     if (!user) return
     setSaving(true)
     try {
-      await persistPendingLocations()
-      const ref = doc(db, 'schedules', scheduleId(weekStart, user.uid))
-      await setDoc(ref, {
-        uid:         user.uid,
-        displayName: profile?.displayName || user.displayName,
-        email:       user.email,
-        team:        profile?.team || null,
-        weekStart,
-        days:        schedule,
-        comments:    comments.trim(),
-        submittedAt: serverTimestamp(),
-      })
-      setSavedAt(new Date())
-      showToast('Schedule saved ✓')
-      syncToExcel() // fire-and-forget — best-effort mirror, never blocks or fails the actual save
+      await addNewLocations(pendingLocations, [])
+      setPendingLocations([])
+      const person = { uid: user.uid, displayName: profile?.displayName || user.displayName, email: user.email, team }
+      const saved = await writeSchedule({ person, weekStart, days: schedule, comments, editorUid: user.uid, existing })
+      setExisting(saved)
+      showToast('Schedule saved.')
+      syncToExcel(user, weekStart, [{ uid: user.uid, days: schedule, comments }]) // fire-and-forget mirror
     } catch (e) {
-      showToast('Save failed — try again')
+      showToast('Save failed — try again.')
     } finally {
       setSaving(false)
     }
   }
 
-  function showToast(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
-  }
-
-  const isComplete = schedule.every(d => d.location)
+  const isComplete = schedule.every((d, i) => d.location || d.onCall || holidays[i])
+  const savedAt = existing?.submittedAt
 
   return (
-    <>
-      <div className="topbar">
-        <div>
-          <div className="topbar-title" style={{ color: 'var(--week-color)' }}>My schedule</div>
-          <div className="topbar-sub">
-            {team ? `${team} team` : 'Set your team on first visit'}
-            {teamCfg?.hint && <> · {teamCfg.hint}</>}
-          </div>
+    <div className="page page-narrow">
+      <div className="page-head">
+        <div className="page-head-text">
+          <h1 className="page-title">My week</h1>
+          <span className="page-sub">
+            {team ? `${teamLabel(team)}${teamCfg?.hint ? ` · ${teamCfg.hint}` : ''}` : 'Choose your team to get started'}
+          </span>
           {savedAt && (
-            <div className="topbar-sub" style={{ marginTop: 2 }}>
-              Saved {savedAt.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            </div>
+            <span className="page-sub">
+              Saved {dayMonth(toISO(savedAt))}, {savedAt.toLocaleTimeString('en-NZ', { hour: 'numeric', minute: '2-digit' })}
+            </span>
           )}
         </div>
-        <span className={`pill ${isComplete ? 'pill-submitted' : 'pill-pending'}`}>
-          {isComplete ? 'Complete' : 'Incomplete'}
-        </span>
+        <Badge tone={isComplete ? 'green' : 'orange'}>{isComplete ? 'Complete' : 'Incomplete'}</Badge>
       </div>
 
       <WeekNav
-        label={weekLabel(weekStart)}
+        weekStart={weekStart}
+        isThisWeek={weekOffset === 0}
         onPrev={() => setWeekOffset(w => w - 1)}
         onNext={() => setWeekOffset(w => w + 1)}
-        canPrev={weekOffset > -MAX_WEEKS_BACK}
-        canNext={weekOffset < MAX_WEEKS_AHEAD}
+        onThisWeek={() => setWeekOffset(0)}
       />
 
+      {nextWeekDue && (
+        <Alert
+          tone="warning"
+          icon={<CalendarClock size={20} />}
+          title="Next week is due"
+          action={<Button size="sm" variant="secondary" onClick={() => setWeekOffset(1)}>Fill in</Button>}
+        >
+          Let the team know where you’ll be from {dayMonth(getCurrentWeekStart(1))}.
+        </Alert>
+      )}
+
+      {existing?.needsConfirm && (
+        <Alert tone="info" icon={<Info size={20} />} title="Filled in for you">
+          An admin started this week for you. Check each day, then tap Save to confirm it.
+        </Alert>
+      )}
+
+      {onCallThisWeek && (
+        <div className="oncall-banner"><Phone size={18} aria-hidden="true" />You’re on call this week</div>
+      )}
+
       {!pushEnabled && needsHomeScreenInstall() && (
-        <div className="card" style={{ padding: 14, margin: '10px 16px' }}>
-          <p className="text-sm" style={{ lineHeight: 1.5 }}>
-            🔔 Add this app to your Home Screen to get a reminder here when your schedule is due
-            — tap <strong>Share</strong> → <strong>Add to Home Screen</strong> in Safari.
-          </p>
-        </div>
+        <Alert tone="info" icon={<Share size={20} />} title="Get Thursday reminders">
+          Add this app to your Home Screen — tap <strong>Share</strong>, then <strong>Add to Home Screen</strong> in Safari.
+        </Alert>
       )}
 
       {!pushEnabled && !needsHomeScreenInstall() && canUsePush() && (
-        <div className="card" style={{ padding: 14, margin: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <p className="text-sm" style={{ lineHeight: 1.4 }}>
-            Get a reminder on this phone before your schedule is due.
-          </p>
-          <button className="btn btn-sm" onClick={handleEnablePush} disabled={enablingPush} style={{ flexShrink: 0 }}>
-            {enablingPush ? '…' : '🔔 Enable'}
-          </button>
-        </div>
+        <Alert
+          tone="info"
+          icon={<Bell size={20} />}
+          title="Get Thursday reminders"
+          action={<Button size="sm" onClick={handleEnablePush} disabled={enablingPush}>{enablingPush ? <Spinner size={16} light /> : 'Turn on'}</Button>}
+        >
+          A nudge on this device before your schedule is due.
+        </Alert>
       )}
 
-      {quickFills.length > 0 && (
-        <div style={{ padding: '10px 16px 4px', display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'wrap' }}>
-          <span className="text-sm text-muted" style={{ flexShrink: 0, lineHeight: '28px' }}>Fill all:</span>
-          {quickFills.map(loc => (
-            <button key={loc} className="btn btn-sm" onClick={() => fillAllDays(loc)}>
-              {loc}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="schedule-panel">
-        <div style={{ paddingTop: 8 }}>
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-              <div className="spinner" />
-            </div>
-          ) : (
-            WEEK_DAYS.map((day, i) => {
-              const date = new Date(weekStart + 'T00:00:00')
-              date.setDate(date.getDate() + i)
-              const dateLabel = date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })
-              const value = schedule[i]?.location ?? ''
-              const onCall = schedule[i]?.onCall ?? false
-              const tint = locClass(onCall ? `${value} on call` : value)
-
-              return (
-                <div className="card" key={day}>
-                  <div className="card-header">
-                    <span className="card-day">{day}</span>
-                    <span className="card-date">{dateLabel}</span>
-                  </div>
-                  <div className="card-row card-row-location">
-                    <LocationCombobox
-                      value={value}
-                      options={locationOptions}
-                      onChange={val => updateDay(i, { location: val })}
-                      onNewValue={registerNewLocation}
-                      className={tint}
-                    />
-                  </div>
-                  <div className="card-row card-row-oncall">
-                    <Toggle
-                      checked={onCall}
-                      onChange={val => updateDay(i, { onCall: val })}
-                      label="📞 On call"
-                    />
-                  </div>
-                </div>
-              )
-            })
-          )}
-        </div>
-
-        <div className="comments-section">
-          <label className="comments-label" htmlFor="week-comments">Comments</label>
-          <p className="text-sm text-muted" style={{ marginBottom: 8, lineHeight: 1.4 }}>
-            e.g. returning from leave, client visits, or anything the team should know this week.
-          </p>
-          <textarea
-            id="week-comments"
-            className="input comments-input"
-            rows={3}
-            placeholder="Optional notes for the week…"
-            value={comments}
-            onChange={e => setComments(e.target.value)}
-          />
-        </div>
-
-        <div style={{ padding: '0 16px 24px' }}>
-          <button
-            className="btn btn-primary btn-full"
-            style={{ padding: 13, fontSize: 15 }}
-            onClick={saveSchedule}
-            disabled={saving}
-          >
-            {saving ? <span className="spinner" style={{ width: 18, height: 18, borderTopColor: 'var(--bg)' }} /> : 'Save & share schedule'}
-          </button>
-        </div>
+      <div className="quick-picks">
+        <span className="text-sm text-muted">Fill every day:</span>
+        {quickFillsForTeam(team).map(loc => (
+          <Tag key={loc} onClick={() => fillAllDays(loc)}>{loc}</Tag>
+        ))}
       </div>
 
-      {toast && <Toast message={toast} />}
-    </>
+      {loading ? <Loading /> : (
+        <div className="day-cards">
+          {WEEK_DAYS.map((day, i) => {
+            const value = schedule[i]?.location ?? ''
+            const onCall = schedule[i]?.onCall ?? false
+            const { bg } = describeDay({ location: value, onCall })
+            return (
+              <div className="card day-card" key={day}>
+                <div className="day-card-head">
+                  <span className="day-card-day">{day}</span>
+                  <span className="day-card-date">{dayMonth(dates[i])}</span>
+                  {holidays[i] && <Badge tone="purple">{holidays[i]}</Badge>}
+                </div>
+                <LocationCombobox
+                  value={value}
+                  options={locationOptions}
+                  onChange={val => updateDay(i, { location: val })}
+                  onNewValue={registerNewLocation}
+                  tint={bg}
+                  placeholder={holidays[i] ? `${holidays[i]} — or type where you’ll be` : undefined}
+                />
+                {showCalls && (
+                  <Switch checked={onCall} onChange={val => updateDay(i, { onCall: val })} label="Customer calls" />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="field">
+        <label className="field-label" htmlFor="week-comments">Comments</label>
+        <span className="text-sm text-muted">e.g. back from leave on the 5th, client visits, anything the team should know.</span>
+        <textarea
+          id="week-comments"
+          className="input"
+          rows={3}
+          placeholder="Optional notes for the week…"
+          value={comments}
+          onChange={e => setComments(e.target.value)}
+        />
+      </div>
+
+      <Button size="lg" block onClick={saveSchedule} disabled={saving || loading}>
+        {saving ? <Spinner size={20} light /> : 'Save schedule'}
+      </Button>
+
+      <Toast message={toast} />
+    </div>
   )
 }

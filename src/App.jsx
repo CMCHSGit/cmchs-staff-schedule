@@ -1,12 +1,26 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { CalendarCheck, CalendarDays, MapPin, CalendarRange, Phone, Settings } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import Login      from './pages/Login'
-import MySchedule from './pages/MySchedule'
-import TeamView   from './pages/TeamView'
-import Admin      from './pages/Admin'
+import Login         from './pages/Login'
+import MySchedule    from './pages/MySchedule'
+import TeamWeek      from './pages/TeamWeek'
+import DayView       from './pages/DayView'
+import LeaveCalendar from './pages/LeaveCalendar'
+import OnCall        from './pages/OnCall'
+import Admin         from './pages/Admin'
 import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
+import { Logo, StripeRule, Spinner } from './components/ui'
+
+// Short labels for the phone's bottom bar, fuller ones for desktop tabs.
+const VIEWS = [
+  { to: '/',       label: 'My week',   tab: 'My week',        Icon: CalendarCheck },
+  { to: '/team',   label: 'Team',      tab: 'Team week',      Icon: CalendarDays },
+  { to: '/day',    label: 'Day',       tab: 'Day',            Icon: MapPin },
+  { to: '/leave',  label: 'Leave',     tab: 'Leave calendar', Icon: CalendarRange },
+  { to: '/oncall', label: 'On call',   tab: 'On call',        Icon: Phone },
+]
 
 export default function App() {
   return (
@@ -23,11 +37,7 @@ function AppRoutes() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   if (user === undefined || (user && !profileReady)) {
-    return (
-      <div className="loading-screen">
-        <div className="spinner" />
-      </div>
-    )
+    return <div className="loading-screen"><Spinner size={32} /></div>
   }
 
   if (!user) {
@@ -49,69 +59,62 @@ function AppRoutes() {
   return (
     <div className="app-shell">
       <TeamOnboarding />
+      <AppHeader />
       <PullToRefresh onRefresh={handleRefresh}>
         <Routes key={refreshKey}>
-          <Route path="/"      element={<MySchedule />} />
-          <Route path="/team"  element={<TeamView />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="*"      element={<Navigate to="/" replace />} />
+          <Route path="/"       element={<MySchedule />} />
+          <Route path="/team"   element={<TeamWeek />} />
+          <Route path="/day"    element={<DayView />} />
+          <Route path="/leave"  element={<LeaveCalendar />} />
+          <Route path="/oncall" element={<OnCall />} />
+          <Route path="/admin"  element={<Admin />} />
+          <Route path="*"       element={<Navigate to="/" replace />} />
         </Routes>
       </PullToRefresh>
-
       <BottomNav />
     </div>
   )
 }
 
-function BottomNav() {
+function AppHeader() {
   const { profile } = useAuth()
-
   return (
-    <nav className="bottom-nav" aria-label="Main navigation">
-      <NavLink to="/" end className={({ isActive }) => `nav-tab nav-week${isActive ? ' active' : ''}`}>
-        <CalIcon />
-        My week
-      </NavLink>
-      <NavLink to="/team" className={({ isActive }) => `nav-tab nav-team${isActive ? ' active' : ''}`}>
-        <TeamIcon />
-        Team
-      </NavLink>
-      {profile?.role === 'admin' && (
-        <NavLink to="/admin" className={({ isActive }) => `nav-tab nav-admin${isActive ? ' active' : ''}`}>
-          <SettingsIcon />
-          Admin
+    <header className="app-header">
+      <div className="app-header-row">
+        <NavLink to="/" className="app-brand" aria-label="Staff schedule — my week">
+          <span className="logo-full"><Logo width={124} /></span>
+          <span className="brand-divider" />
+          <span className="logo-mark"><Logo variant="mark" width={32} /></span>
+          <span className="app-title">Staff schedule</span>
         </NavLink>
-      )}
-    </nav>
+        <nav className="header-tabs" aria-label="Views">
+          {VIEWS.map(v => (
+            <NavLink key={v.to} to={v.to} end className={({ isActive }) => `header-tab${isActive ? ' active' : ''}`}>
+              {v.tab}
+            </NavLink>
+          ))}
+        </nav>
+        {profile?.role === 'admin' && (
+          <NavLink to="/admin" className={({ isActive }) => `header-admin${isActive ? ' active' : ''}`} aria-label="Admin">
+            <Settings size={20} aria-hidden="true" />
+            <span className="header-admin-label">Admin</span>
+          </NavLink>
+        )}
+      </div>
+      <StripeRule thickness={4} />
+    </header>
   )
 }
 
-// Minimal inline SVG icons — no external dependency
-function CalIcon() {
+function BottomNav() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
-    </svg>
-  )
-}
-function TeamIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="9" cy="7" r="4"/>
-      <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      <path d="M21 21v-2a4 4 0 0 0-3-3.87"/>
-    </svg>
-  )
-}
-function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
-    </svg>
+    <nav className="bottom-nav" aria-label="Views">
+      {VIEWS.map(({ to, label, Icon }) => (
+        <NavLink key={to} to={to} end className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <Icon size={22} aria-hidden="true" />
+          <span>{label}</span>
+        </NavLink>
+      ))}
+    </nav>
   )
 }

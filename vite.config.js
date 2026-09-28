@@ -11,14 +11,14 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
       },
       includeAssets: ['icons/*.png'],
       manifest: {
         name: 'CMCHS Staff Schedule',
         short_name: 'CMCHS Staff Schedule',
         description: 'Team weekly location scheduler',
-        theme_color: '#111111',
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

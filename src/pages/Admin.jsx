@@ -5,8 +5,10 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { Bell } from 'lucide-react'
 import Toast from '../components/Toast'
-import { TEAMS } from '../utils/teams'
+import { TEAMS, teamLabel } from '../utils/teams'
+import { Badge, Button, Loading } from '../components/ui'
 import { APP_VERSION } from '../version'
 
 export default function Admin() {
@@ -15,32 +17,20 @@ export default function Admin() {
 
   if (profile?.role !== 'admin') {
     return (
-      <div style={{ padding: 32, textAlign: 'center' }}>
+      <div className="page page-narrow">
         <p className="text-muted">Admin access only.</p>
       </div>
     )
   }
 
   return (
-    <>
-      <div className="topbar">
-        <div className="topbar-title" style={{ color: 'var(--admin-color)' }}>Admin</div>
-      </div>
+    <div className="page page-narrow">
+      <h1 className="page-title">Admin</h1>
 
-      <div style={{ display: 'flex', borderBottom: '0.5px solid var(--border)' }}>
-        {['locations', 'users'].map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              flex: 1, padding: '10px 0', fontSize: 14, background: 'none',
-              border: 'none', cursor: 'pointer', color: tab === t ? 'var(--admin-color)' : 'var(--text-3)',
-              fontWeight: tab === t ? 500 : 400,
-              borderBottom: tab === t ? '2px solid var(--admin-color)' : '2px solid transparent',
-              textTransform: 'capitalize', fontFamily: 'inherit'
-            }}
-          >
-            {t}
+      <div className="tabs" role="tablist">
+        {[['locations', 'Locations'], ['users', 'People']].map(([t, label]) => (
+          <button key={t} type="button" role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
+            {label}
           </button>
         ))}
       </div>
@@ -48,10 +38,8 @@ export default function Admin() {
       {tab === 'locations' && <LocationsTab />}
       {tab === 'users'     && <UsersTab />}
 
-      <p className="text-sm text-muted" style={{ textAlign: 'center', padding: '24px 16px' }}>
-        CMCHS Staff Schedule v{APP_VERSION}
-      </p>
-    </>
+      <p className="version-note">CMCHS Staff Schedule v{APP_VERSION}</p>
+    </div>
   )
 }
 
@@ -104,15 +92,13 @@ function LocationsTab() {
   }
 
   return (
-    <div style={{ paddingBottom: 24 }}>
-      <div className="section-header">Locations</div>
-      <p className="text-sm text-muted px-16" style={{ marginBottom: 12, lineHeight: 1.5 }}>
-        Manage the dropdown options people see when filling out their schedule.
-        Hiding a location won't affect already-saved schedules.
+    <div className="page-head-text" style={{ gap: 14 }}>
+      <p className="text-sm text-muted">
+        The suggestions people see when filling in their schedule. Anything typed that isn’t
+        here gets added automatically. Hiding a location won’t change schedules already saved.
       </p>
 
-      {/* Add new */}
-      <div style={{ display: 'flex', gap: 8, padding: '0 16px 16px' }}>
+      <div style={{ display: 'flex', gap: 8 }}>
         <input
           className="input"
           placeholder="New location name…"
@@ -121,42 +107,28 @@ function LocationsTab() {
           onKeyDown={e => e.key === 'Enter' && addLocation()}
           style={{ flex: 1 }}
         />
-        <button className="btn btn-primary" onClick={addLocation}>Add</button>
+        <Button onClick={addLocation}>Add</Button>
       </div>
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-          <div className="spinner" />
-        </div>
-      ) : (
-        <div className="card" style={{ margin: '0 16px' }}>
-          {locations.length === 0 && (
-            <p className="text-sm text-muted" style={{ padding: 16 }}>No locations yet.</p>
-          )}
-          {locations.map((loc, i) => (
-            <div key={loc.id} className="admin-item" style={{ opacity: loc.active ? 1 : 0.45 }}>
-              <div>
-                <span style={{ fontSize: 14 }}>{loc.name}</span>
-                {!loc.active && <span className="text-sm text-muted" style={{ marginLeft: 8 }}>hidden</span>}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-sm" onClick={() => toggleActive(loc)}>
-                  {loc.active ? 'Hide' : 'Show'}
-                </button>
-                <button
-                  className="btn btn-sm"
-                  style={{ color: 'var(--leave-text)', borderColor: 'var(--leave-bg)' }}
-                  onClick={() => removeLocation(loc)}
-                >
-                  Delete
-                </button>
+      {loading ? <Loading /> : (
+        <div className="card admin-list">
+          {locations.length === 0 && <p className="text-sm text-muted" style={{ padding: 16 }}>No locations yet.</p>}
+          {locations.map(loc => (
+            <div key={loc.id} className="admin-item" style={{ opacity: loc.active ? 1 : 0.5 }}>
+              <span className="admin-item-name">
+                {loc.name}
+                {!loc.active && <Badge tone="neutral">Hidden</Badge>}
+              </span>
+              <div className="admin-controls">
+                <Button variant="secondary" size="sm" onClick={() => toggleActive(loc)}>{loc.active ? 'Hide' : 'Show'}</Button>
+                <Button variant="ghost" size="sm" style={{ color: 'var(--status-critical)' }} onClick={() => removeLocation(loc)}>Delete</Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {toast && <Toast message={toast} />}
+      <Toast message={toast} />
     </div>
   )
 }
@@ -277,46 +249,44 @@ function UsersTab() {
   }
 
   return (
-    <div style={{ paddingBottom: 24 }}>
-      <div className="section-header">People</div>
-      <p className="text-sm text-muted px-16" style={{ marginBottom: 12, lineHeight: 1.5 }}>
+    <div className="page-head-text" style={{ gap: 14 }}>
+      <p className="text-sm text-muted">
         Assign teams and roles. Most people pick their team on first sign-in; change it here if needed.
+        Admins can update anyone’s schedule from Team week and run the on-call roster.
       </p>
 
-      <div style={{ padding: '0 16px 16px' }}>
-        <button className="btn btn-sm" onClick={() => setShowImport(v => !v)}>
+      <div>
+        <Button variant="secondary" size="sm" onClick={() => setShowImport(v => !v)}>
           {showImport ? 'Cancel import' : 'Import staff from Excel'}
-        </button>
+        </Button>
         {showImport && (
-          <div style={{ marginTop: 8 }}>
-            <p className="text-sm text-muted" style={{ marginBottom: 6, lineHeight: 1.4 }}>
+          <div className="field" style={{ marginTop: 10 }}>
+            <p className="text-sm text-muted">
               Paste one person per line, as <code>Name, Team</code> — e.g. <code>Karen, Admin</code>
               or <code>Mark Henderwood, Application</code> for someone who shares a first name
-              with someone else on the list. Adds a placeholder for anyone who hasn't signed in
+              with someone else on the list. Adds a placeholder for anyone who hasn’t signed in
               yet (safe to run more than once — already-imported or already-real people are
               skipped). When someone first signs in for real, this app automatically finds and
-              adopts their matching placeholder's team — by email guess (first.last@) when a
-              full name was pasted, otherwise by first name, and only when that's unambiguous.
+              adopts their matching placeholder’s team — by email guess (first.last@) when a
+              full name was pasted, otherwise by first name, and only when that’s unambiguous.
               A first-name-only entry that turns out to collide with someone else is left for
               you to sort out by hand rather than guessed at.
             </p>
             <textarea
               className="input"
               rows={8}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
+              style={{ fontFamily: 'var(--font-mono)' }}
               placeholder={'Karen, Admin\nJan, Admin\nMark, Management\n...'}
               value={rosterText}
               onChange={e => setRosterText(e.target.value)}
             />
-            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={importFromExcel}>
-              Import
-            </button>
+            <div><Button size="sm" onClick={importFromExcel}>Import</Button></div>
           </div>
         )}
       </div>
 
-      <div style={{ padding: '0 16px 16px' }}>
-        <label className="btn btn-sm" style={{ display: 'inline-flex' }}>
+      <div className="field">
+        <label className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>
           {importing ? 'Importing…' : 'Import schedule history (.json)'}
           <input
             type="file"
@@ -326,45 +296,43 @@ function UsersTab() {
             onChange={e => { if (e.target.files[0]) importScheduleHistory(e.target.files[0]); e.target.value = '' }}
           />
         </label>
-        <p className="text-sm text-muted" style={{ marginTop: 6, lineHeight: 1.4 }}>
+        <p className="text-sm text-muted">
           Backfills past weeks from an exported Excel schedule file. Matches each entry to an
           existing person (by Excel name, or first name if unambiguous) and only fills in weeks
-          that don't already have a saved schedule — never overwrites one that's already there.
+          that don’t already have a saved schedule — never overwrites one that’s already there.
         </p>
       </div>
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
-          <div className="spinner" />
-        </div>
-      ) : (
-        <div className="card" style={{ margin: '0 16px' }}>
+      {loading ? <Loading /> : (
+        <div className="card admin-list">
           {users.map(u => (
-            <div key={u.uid} className="admin-item" style={{ gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div key={u.uid} className="admin-item">
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div className="admin-item-name">
                   {u.displayName || '(no name)'}
                   {u.fcmTokens?.length > 0 && (
-                    <span title="Push reminders enabled" style={{ marginLeft: 6 }}>🔔</span>
+                    <Bell size={15} color="var(--chs-green)" aria-label="Push reminders on" />
                   )}
                 </div>
                 <div className="text-sm text-muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {u.pending ? '⏳ Not signed in yet' : u.email}
+                  {u.pending ? <Badge tone="neutral">Not signed in yet</Badge> : u.email}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div className="admin-controls">
                 <select
                   value={u.team || ''}
-                  onChange={e => { updateUser(u.uid, 'team', e.target.value || null); showToast('Saved') }}
-                  style={{ width: 132, fontSize: 16 }}
+                  onChange={e => { updateUser(u.uid, 'team', e.target.value || null); showToast('Saved.') }}
+                  style={{ width: 150 }}
+                  aria-label="Team"
                 >
                   <option value="">No team</option>
-                  {TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TEAMS.map(t => <option key={t} value={t}>{teamLabel(t)}</option>)}
                 </select>
                 <select
                   value={u.role || 'user'}
-                  onChange={e => { updateUser(u.uid, 'role', e.target.value); showToast('Saved') }}
-                  style={{ width: 100, fontSize: 16 }}
+                  onChange={e => { updateUser(u.uid, 'role', e.target.value); showToast('Saved.') }}
+                  style={{ width: 110 }}
+                  aria-label="Role"
                 >
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
@@ -373,15 +341,16 @@ function UsersTab() {
                   className="input"
                   defaultValue={u.excelName || ''}
                   placeholder="Excel name"
-                  title="First name as it appears in the Excel schedule's Name column — used to sync this person's saves into the right row. Leave blank to skip syncing them."
+                  aria-label="Excel name"
+                  title="Name as it appears in the Excel schedule's Name column — also the name the schedule shows. Leave blank to skip syncing them."
                   onBlur={e => {
                     const val = e.target.value.trim()
                     if (val !== (u.excelName || '')) {
                       updateUser(u.uid, 'excelName', val || null)
-                      showToast('Saved')
+                      showToast('Saved.')
                     }
                   }}
-                  style={{ width: 110, fontSize: 16 }}
+                  style={{ width: 130 }}
                 />
               </div>
             </div>
@@ -389,7 +358,7 @@ function UsersTab() {
         </div>
       )}
 
-      {toast && <Toast message={toast} />}
+      <Toast message={toast} />
     </div>
   )
 }

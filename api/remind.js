@@ -76,18 +76,19 @@ async function sendReminderEmail(to, name, weekStart) {
       to:      [to],
       subject: `Where are you next week? (${weekLabel})`,
       html: `
-        <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
-          <h2 style="font-size: 20px; margin-bottom: 8px;">Hi ${name || 'there'} 👋</h2>
-          <p style="color: #555; line-height: 1.6; margin-bottom: 24px;">
+        <div style="font-family: 'Source Sans 3', 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #575756;">
+          <div style="height: 4px; background: linear-gradient(90deg, #554596 33.3%, #80bd01 33.3% 66.6%, #ef7d00 66.6%); margin-bottom: 24px;"></div>
+          <h2 style="font-size: 20px; margin: 0 0 8px; color: #1d1d1d;">Hi ${name || 'there'},</h2>
+          <p style="line-height: 1.6; margin-bottom: 24px;">
             You haven't filled out your location schedule for <strong>${weekLabel}</strong> yet.
             It only takes a minute — let the team know where you'll be each day.
           </p>
           <a href="${process.env.APP_URL}"
-             style="display: inline-block; background: #111; color: #fff; text-decoration: none;
-                    padding: 12px 24px; border-radius: 8px; font-size: 15px; font-weight: 500;">
-            Fill out my schedule →
+             style="display: inline-block; background: #554596; color: #fff; text-decoration: none;
+                    padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: 600;">
+            Fill in my schedule
           </a>
-          <p style="color: #999; font-size: 13px; margin-top: 32px;">
+          <p style="color: #747577; font-size: 13px; margin-top: 32px;">
             You're receiving this because you're part of the CMCHS Staff Schedule team tracker.
           </p>
         </div>
@@ -153,7 +154,9 @@ export default async function handler(req, res) {
     const schedulesSnap = await db.collection('schedules')
       .where('weekStart', '==', weekStart)
       .get()
-    const submittedUids = new Set(schedulesSnap.docs.map(d => d.data().uid))
+    // A week an admin pre-filled (Copy last week, or a Team week edit) still
+    // needs the person to check it, so it doesn't count as submitted yet.
+    const submittedUids = new Set(schedulesSnap.docs.map(d => d.data()).filter(s => !s.needsConfirm).map(s => s.uid))
 
     // Filter to users who haven't submitted
     const pending = users.filter(u => u.email && !submittedUids.has(u.uid))

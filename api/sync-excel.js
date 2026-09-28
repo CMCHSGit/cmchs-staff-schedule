@@ -1,8 +1,8 @@
 /**
  * api/sync-excel.js — Vercel Serverless Function
  *
- * Fired (fire-and-forget) from MySchedule.jsx right after a schedule saves
- * successfully. Mirrors that save into the company's existing Excel
+ * Fired (fire-and-forget) by the app right after a schedule saves — My week,
+ * a Team week edit, or an admin's "Copy last week" (several people at once). Mirrors that save into the company's existing Excel
  * schedule via Microsoft Graph — one-way (app → Excel) only; see
  * atomic-baking-noodle.md / TODO.md for why. Never the source of truth,
  * so every expected non-error case (no sheet for that week yet, no
@@ -101,16 +101,19 @@ async function findWeekSheet(token, weekStart) {
   return null
 }
 
-/** Finds the row number (1-indexed) whose column B matches excelName, or null. */
-async function findPersonRow(token, sheetName, excelName) {
-  const target = excelName.trim().toLowerCase()
+/**
+ * Column B of a week's sheet as a list of normalised names, so row lookups
+ * need only one read. The weekly on-call engineer's cell carries a suffix
+ * ("Sam - OnCall") and some have stray spaces — both stripped, otherwise
+ * that person's row would never match on their on-call week.
+ */
+async function readNameColumn(token, sheetName) {
   const col = await graphGet(token, `/workbook/worksheets('${encodeURIComponent(sheetName)}')/range(address='B1:B120')`)
-  const rows = col.values || []
-  for (let i = 0; i < rows.length; i++) {
-    const cell = (rows[i][0] || '').toString().trim().toLowerCase()
-    if (cell === target) return i + 1
-  }
-  return null
+  return (col.values || []).map(r => normaliseName(r[0]))
+}
+
+function normaliseName(value) {
+  return (value || '').toString().replace(/\s*-\s*on\s*call\s*$/i, '').replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 export default async function handler(req, res) {
@@ -126,15 +129,30 @@ export default async function handler(req, res) {
     const decoded = await getAuth().verifyIdToken(idToken)
     const uid = decoded.uid
 
-    const { weekStart, days, comments } = req.body || {}
-    if (!weekStart || !Array.isArray(days) || days.length !== 5) {
-      return res.status(400).json({ error: 'weekStart and 5 days are required' })
+    // { weekStart, entries: [{ uid, cells: [5 texts], comments }] }. The older
+    // { weekStart, days, comments } shape (the caller's own week) still works,
+    // for app copies cached from before the change.
+    const body = req.body || {}
+    const { weekStart } = body
+    const entries = Array.isArray(body.entries)
+      ? body.entries
+      : [{ uid, cells: (body.days || []).map(d => d?.location || ''), comments: body.comments }]
+    if (!weekStart || !entries.length || entries.some(e => !Array.isArray(e.cells) || e.cells.length !== 5)) {
+      return res.status(400).json({ error: 'weekStart and entries with 5 cells each are required' })
     }
 
-    const userSnap = await getFirestore().collection('users').doc(uid).get()
-    const excelName = userSnap.data()?.excelName
-    if (!excelName) {
-      return res.status(200).json({ skipped: 'no excelName configured for this user' })
+    const db = getFirestore()
+    const targets = entries.map(e => ({ ...e, uid: e.uid || uid }))
+    if (targets.some(e => e.uid !== uid)) {
+      const caller = await db.collection('users').doc(uid).get()
+      if (caller.data()?.role !== 'admin') return res.status(403).json({ error: 'Only admins can sync other people' })
+    }
+
+    const userSnaps = await db.getAll(...targets.map(e => db.collection('users').doc(e.uid)))
+    const excelNames = new Map(userSnaps.map(s => [s.id, s.data()?.excelName]))
+    const configured = targets.filter(e => excelNames.get(e.uid))
+    if (!configured.length) {
+      return res.status(200).json({ skipped: 'no excelName configured for these people' })
     }
 
     const token = await getGraphToken()
@@ -144,15 +162,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: `no Excel sheet exists yet for week ${weekStart}` })
     }
 
-    const row = await findPersonRow(token, sheetName, excelName)
-    if (!row) {
-      return res.status(200).json({ skipped: `"${excelName}" not found in sheet "${sheetName}"` })
+    const names = await readNameColumn(token, sheetName)
+    const results = []
+    for (const e of configured) {
+      const excelName = excelNames.get(e.uid)
+      const index = names.indexOf(normaliseName(excelName))
+      if (index < 0) { results.push({ uid: e.uid, skipped: `"${excelName}" not found in sheet "${sheetName}"` }); continue }
+      const row = index + 1
+      const values = [[...e.cells.map(c => (c || '').toString()), (e.comments || '').toString()]]
+      await graphPatch(token, `/workbook/worksheets('${encodeURIComponent(sheetName)}')/range(address='D${row}:I${row}')`, { values })
+      results.push({ uid: e.uid, synced: true, row })
     }
 
-    const values = [[...days.map(d => d.location || ''), comments || '']]
-    await graphPatch(token, `/workbook/worksheets('${encodeURIComponent(sheetName)}')/range(address='D${row}:I${row}')`, { values })
-
-    return res.status(200).json({ synced: true, sheet: sheetName, row })
+    return res.status(200).json({ sheet: sheetName, results })
   } catch (err) {
     console.error('Excel sync failed:', err)
     // Best-effort mirror — a failure here should never look like the

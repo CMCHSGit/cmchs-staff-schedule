@@ -1,11 +1,21 @@
-// WeekNav.jsx
-export function WeekNav({ label, onPrev, onNext, canPrev, canNext }) {
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { Button, IconButton } from './ui'
+import { dayMonthYear } from '../utils/week'
+
+/** Previous/next week, with a way back to this week once you've wandered off. */
+export default function WeekNav({ weekStart, isThisWeek, onPrev, onNext, onThisWeek, children }) {
   return (
     <div className="week-nav">
-      <button className="week-arrow" onClick={onPrev} disabled={!canPrev} aria-label="Previous week">‹</button>
-      <span className="week-nav-label">{label}</span>
-      <button className="week-arrow" onClick={onNext} disabled={!canNext} aria-label="Next week">›</button>
+      <div className="week-nav-main">
+        <IconButton label="Previous week" onClick={onPrev}><ChevronLeft size={20} /></IconButton>
+        <div className="week-nav-label">
+          <span className="overline">Week starting</span>
+          <span className="week-nav-date">{dayMonthYear(weekStart)}</span>
+        </div>
+        <IconButton label="Next week" onClick={onNext}><ChevronRight size={20} /></IconButton>
+      </div>
+      {!isThisWeek && <Button variant="ghost" size="sm" onClick={onThisWeek}>This week</Button>}
+      {children && <div className="week-nav-actions">{children}</div>}
     </div>
   )
 }
-export default WeekNav

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { Button, Logo, StripeRule, Spinner } from '../components/ui'
 
 export default function Login() {
   const { signInWithMicrosoft } = useAuth()
@@ -24,44 +25,31 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-logo">📍</div>
-      <div>
-        <h1 className="login-title">CMCHS Staff Schedule</h1>
-        <p className="login-sub mt-8">
-          Let your team know where you'll be each day.
+      <StripeRule thickness={6} />
+      <div className="login-body">
+        <Logo width={220} />
+        <div>
+          <h1 className="login-title">Staff schedule</h1>
+          <p className="login-sub">Let your team know where you’ll be each day.</p>
+        </div>
+
+        {error && <p className="login-error">{error}</p>}
+
+        <Button size="lg" block onClick={handleSignIn} disabled={loading} style={{ maxWidth: 300 }} iconLeft={!loading && <MicrosoftIcon />}>
+          {loading ? <Spinner size={20} light /> : 'Sign in with Microsoft'}
+        </Button>
+
+        <p className="text-sm text-muted" style={{ maxWidth: 300 }}>
+          Uses your existing company account — no new password needed.
         </p>
       </div>
-
-      {error && (
-        <p style={{ color: 'var(--leave-text)', fontSize: 14 }}>{error}</p>
-      )}
-
-      <button
-        className="btn btn-primary"
-        style={{ width: '100%', maxWidth: 280, padding: '13px 20px', fontSize: 15 }}
-        onClick={handleSignIn}
-        disabled={loading}
-      >
-        {loading ? (
-          <span className="spinner" style={{ width: 18, height: 18 }} />
-        ) : (
-          <>
-            <MicrosoftIcon />
-            Sign in with Microsoft
-          </>
-        )}
-      </button>
-
-      <p className="text-sm text-muted" style={{ maxWidth: 280 }}>
-        Uses your existing company account — no new password needed.
-      </p>
     </div>
   )
 }
 
 function MicrosoftIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 21 21" fill="none">
+    <svg width="18" height="18" viewBox="0 0 21 21" fill="none" aria-hidden="true">
       <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
       <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
       <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>

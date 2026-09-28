@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { TEAMS, getTeamConfig } from '../utils/teams'
+import { TEAMS, getTeamConfig, teamLabel } from '../utils/teams'
+import { Button, StripeRule, Spinner } from './ui'
 
 function hasTeam(profile) {
   return Boolean(profile?.team?.trim())
@@ -36,48 +37,48 @@ export default function TeamOnboarding() {
 
   return (
     <div className="onboarding-overlay">
-      <div className="onboarding-card">
-        <h2 className="onboarding-title">Which team are you on?</h2>
-        <p className="text-sm text-muted" style={{ lineHeight: 1.5, marginBottom: 16 }}>
-          We’ll remember this for next time. Your schedule defaults and team view will match your group.
-        </p>
-
-        <div className="onboarding-teams">
-          {TEAMS.map(team => {
-            const cfg = getTeamConfig(team)
-            return (
-              <button
-                key={team}
-                type="button"
-                className={`onboarding-team${selected === team ? ' selected' : ''}`}
-                style={{ '--team-color': cfg?.color }}
-                onClick={() => setSelected(team)}
-              >
-                <span className="onboarding-team-name">{team}</span>
-                <span className="onboarding-team-hint">{cfg?.hint}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {preview && (
-          <p className="text-sm text-muted" style={{ marginTop: 12, lineHeight: 1.4 }}>
-            {preview.defaultLocation
-              ? `New weeks default to “${preview.defaultLocation}”.`
-              : 'You’ll choose a location for each day.'}
+      <div className="onboarding-card" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <StripeRule thickness={5} />
+        <div className="onboarding-inner">
+          <h2 className="onboarding-title" id="onboarding-title">Which team are you on?</h2>
+          <p className="text-sm text-muted">
+            We’ll remember this for next time. It puts you in the right group on the team schedule.
           </p>
-        )}
 
-        {error && <p style={{ color: 'var(--leave-text)', fontSize: 14, marginTop: 12 }}>{error}</p>}
+          <div className="onboarding-teams">
+            {TEAMS.map(team => {
+              const cfg = getTeamConfig(team)
+              return (
+                <button
+                  key={team}
+                  type="button"
+                  className={`onboarding-team${selected === team ? ' selected' : ''}`}
+                  onClick={() => setSelected(team)}
+                >
+                  <span className="wk-band" style={{ background: cfg?.color }} />
+                  <span>
+                    <span className="onboarding-team-name">{teamLabel(team)}</span>
+                    <span className="onboarding-team-hint">{cfg?.hint}</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
 
-        <button
-          className="btn btn-primary btn-full"
-          style={{ marginTop: 20, padding: 13 }}
-          disabled={!selected || saving}
-          onClick={saveTeam}
-        >
-          {saving ? <span className="spinner" style={{ width: 18, height: 18, borderTopColor: 'var(--bg)' }} /> : 'Continue'}
-        </button>
+          {preview && (
+            <p className="text-sm text-muted">
+              {preview.defaultLocation
+                ? `Most days default to “${preview.defaultLocation}”.`
+                : 'You’ll choose a location for each day.'}
+            </p>
+          )}
+
+          {error && <p className="login-error">{error}</p>}
+
+          <Button block disabled={!selected || saving} onClick={saveTeam}>
+            {saving ? <Spinner size={18} light /> : 'Continue'}
+          </Button>
+        </div>
       </div>
     </div>
   )

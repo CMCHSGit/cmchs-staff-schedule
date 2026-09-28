@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
  * calls onNewValue, so the caller can offer it as a suggestion right away
  * (before it's actually persisted anywhere).
  */
-export default function LocationCombobox({ value, options, onChange, onNewValue, className = '' }) {
+export default function LocationCombobox({ value, options, onChange, onNewValue, tint, placeholder = 'Type or pick a location…', id }) {
   const [text, setText] = useState(value || '')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
@@ -57,9 +57,14 @@ export default function LocationCombobox({ value, options, onChange, onNewValue,
   return (
     <div className="combobox">
       <input
-        className={`input combobox-input ${className}`}
+        id={id}
+        className="input combobox-input"
+        // backgroundColor, never the background shorthand — that would wipe
+        // out the dropdown chevron, which is this input's background-image.
+        style={tint ? { backgroundColor: tint } : undefined}
         value={text}
-        placeholder="Type or pick a location…"
+        placeholder={placeholder}
+        autoComplete="off"
         onChange={e => { setText(e.target.value); setOpen(true); setHighlight(0) }}
         onFocus={() => setOpen(true)}
         onBlur={handleBlur}

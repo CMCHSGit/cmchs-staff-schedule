@@ -2,6 +2,20 @@
 
 Last updated: 2026-09-28
 
+## v2 design (Staff-Schedule_v2) — integrated 2026-09-29
+
+New CHS look plus Team week, Day, Leave calendar and On-call views, admin tap-to-edit and
+"Copy last week".
+
+- [ ] **Publish the updated `firestore.rules`** in Firebase Console → Firestore → Rules.
+      Until then, admins can't save other people's entries or the on-call roster (the app
+      says so instead of failing silently). Everyone's own My week keeps working regardless.
+- [ ] Decide whether regional anniversary days (Wellington, Canterbury…) should show too —
+      only national holidays + Auckland Anniversary are built in (`src/utils/holidays.js`).
+- [ ] Matariki dates are listed to 2032 — extend the table in `holidays.js` before then.
+- [ ] Excel sync still writes text only, not the Excel fill colours — possible follow-up once
+      the sync is live and proven.
+
 ## Smartly leave integration (parked — pick up later)
 
 Goal: when staff leave is approved in Smartly, it should automatically populate into
