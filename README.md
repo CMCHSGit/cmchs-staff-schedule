@@ -10,6 +10,7 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 - **Database**: Firebase Firestore
 - **Hosting**: Vercel
 - **Reminders**: push notification (Firebase Cloud Messaging) + email (Resend), sent every Thursday morning NZ time
+- **Excel sync**: one-way (app → Excel), mirrors saves into the existing company Excel schedule via Microsoft Graph
 
 ---
 
@@ -37,6 +38,8 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
    - Also add `http://localhost:5173/__/auth/handler` for local dev
 5. After creation, copy the **Directory (tenant) ID** → `VITE_AZURE_TENANT_ID` in `.env`
 6. In Firebase Console → Authentication → Microsoft → paste in the **Application (client) ID** and a **Client Secret** (create one under Certificates & Secrets in Azure)
+7. Copy the **Application (client) ID** into `AZURE_CLIENT_ID` too — Excel sync (below) reuses
+   this same app registration rather than needing a second one
 
 ---
 
@@ -49,7 +52,29 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 
 ---
 
-## 4. Local development
+## 4. Excel sync setup (optional)
+
+Mirrors every schedule save into the existing company Excel schedule — **one-way**
+(app → Excel), so people can still edit that file directly and this never overwrites their
+edits, it only ever fills in from the app's side. Skip this whole section if that file
+doesn't exist for your deployment.
+
+1. In the same Azure app registration from step 2 — **API permissions** → Add a permission →
+   **Microsoft Graph** → **Application permissions** → `Files.ReadWrite` → have an admin grant
+   consent
+2. **Certificates & secrets** → New client secret → copy the value into `AZURE_CLIENT_SECRET`
+   (a separate secret from whichever one Firebase Auth's sign-in uses — keeps them
+   independently revocable)
+3. Resolve the SharePoint site ID via Graph Explorer (or any authenticated Graph call):
+   `GET https://graph.microsoft.com/v1.0/sites/{hostname}:/sites/{site-path}` → copy the
+   returned `id` into `SHAREPOINT_SITE_ID`
+4. Set `EXCEL_FILE_PATH` to that file's path within the site's default document library
+5. In the app, **Admin → Users**, set each person's **Excel name** — the first name exactly as
+   it appears in that sheet's Name column. Anyone left blank is simply skipped (not an error)
+
+---
+
+## 5. Local development
 
 ```bash
 npm install
@@ -59,13 +84,14 @@ npm run dev
 
 ---
 
-## 5. Deploy to Vercel
+## 6. Deploy to Vercel
 
 1. Push to GitHub
 2. Import repo in [Vercel](https://vercel.com)
 3. Add all env vars from `.env.example` under **Settings → Environment Variables**
    - The `VITE_*` vars go to **Production + Preview + Development**
-   - The server-only vars (`FIREBASE_*`, `RESEND_*`, `CRON_SECRET`) go to **Production** only
+   - The server-only vars (`FIREBASE_*`, `RESEND_*`, `CRON_SECRET`, `AZURE_CLIENT_*`,
+     `SHAREPOINT_SITE_ID`, `EXCEL_FILE_PATH`) go to **Production** only
 4. Deploy
 
 The cron job in `vercel.json` runs every Wednesday at 20:00 UTC (= Thursday 08:00 NZT — the
@@ -79,7 +105,7 @@ a fallback for anyone who hasn't opted in yet or whose device token has expired.
 
 ---
 
-## 6. First-time admin setup
+## 7. First-time admin setup
 
 After deploying:
 
@@ -97,6 +123,8 @@ After deploying:
 /users/{uid}
   displayName, email, team, role (user|admin), createdAt
   fcmTokens: [ ... ]           — optional, one per device with push enabled
+  excelName                    — optional, first name as it appears in the Excel schedule;
+                                  unset means this person is skipped by Excel sync
 
 /locations/{id}
   name, order, active, createdAt

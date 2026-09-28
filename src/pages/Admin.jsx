@@ -211,7 +211,7 @@ function UsersTab() {
                   {u.email}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 <select
                   value={u.team || ''}
                   onChange={e => { updateUser(u.uid, 'team', e.target.value || null); showToast('Saved') }}
@@ -228,6 +228,20 @@ function UsersTab() {
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
                 </select>
+                <input
+                  className="input"
+                  defaultValue={u.excelName || ''}
+                  placeholder="Excel name"
+                  title="First name as it appears in the Excel schedule's Name column — used to sync this person's saves into the right row. Leave blank to skip syncing them."
+                  onBlur={e => {
+                    const val = e.target.value.trim()
+                    if (val !== (u.excelName || '')) {
+                      updateUser(u.uid, 'excelName', val || null)
+                      showToast('Saved')
+                    }
+                  }}
+                  style={{ width: 110, fontSize: 16 }}
+                />
               </div>
             </div>
           ))}

@@ -137,6 +137,20 @@ export default function MySchedule() {
     }
   }
 
+  /** Best-effort mirror into the company's existing Excel schedule. Never awaited by the caller. */
+  async function syncToExcel() {
+    try {
+      const idToken = await user.getIdToken()
+      await fetch('/api/sync-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ weekStart, days: schedule, comments: comments.trim() }),
+      })
+    } catch (e) {
+      console.error('Excel sync failed:', e)
+    }
+  }
+
   async function saveSchedule() {
     if (!user) return
     setSaving(true)
@@ -155,6 +169,7 @@ export default function MySchedule() {
       })
       setSavedAt(new Date())
       showToast('Schedule saved ✓')
+      syncToExcel() // fire-and-forget — best-effort mirror, never blocks or fails the actual save
     } catch (e) {
       showToast('Save failed — try again')
     } finally {
