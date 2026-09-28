@@ -64,8 +64,14 @@ Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedul
 
 - [x] Inspect the actual workbook structure (sheets, columns, merged cells, comments column).
 - [x] Design + build the sync function, the `excelName` admin field, and the save-time trigger.
-- [ ] **Grant `Files.ReadWrite` (Application) + admin consent** on the existing Azure app
-      registration, and generate a new client secret for it (`AZURE_CLIENT_SECRET`).
+- [x] **`Files.ReadWrite.All` (Application) permission added** to the Azure app registration
+      (2026-09-28) — but **blocked on admin consent**: Peter isn't a Global Admin, and the IT
+      person who is was away the day this was tried. Azure Portal → the app registration →
+      API permissions shows it listed with Status "⚠ Not granted for Cass Medical Limited" —
+      whoever has admin rights just needs to open that same page and click "Grant admin
+      consent for Cass Medical Limited" (no need to re-add the permission, it's already
+      there). Client secret not created yet either — do that at the same time (Certificates
+      & secrets → New client secret → copy the Value into `AZURE_CLIENT_SECRET`).
 - [ ] **Resolve `SHAREPOINT_SITE_ID`** via Graph Explorer — confirm this file is actually on a
       SharePoint site (not a personal OneDrive) and get its site ID.
 - [ ] Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_FILE_PATH` in Vercel env vars.
