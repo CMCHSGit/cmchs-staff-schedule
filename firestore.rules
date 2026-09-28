@@ -7,10 +7,18 @@ service cloud.firestore {
     function isAdmin()        { return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
     function isOwner(uid)     { return isSignedIn() && request.auth.uid == uid; }
 
-    // Users — read own profile, admins read/write all
+    // Users — all signed-in users can read the whole roster (Team view needs
+    // everyone's name/team, not just their own — this was previously
+    // owner-or-admin-only, which meant Team view silently broke for any
+    // non-admin signed-in user; only ever worked because testing so far has
+    // all been done as an admin). Create/update still owner-or-admin-only.
+    // Delete additionally allows removing a "pending" placeholder record
+    // (Admin's bulk-import feature) once claimed by a real sign-in — but
+    // never a real (non-pending) account, which stays admin-only.
     match /users/{uid} {
-      allow read:  if isOwner(uid) || isAdmin();
-      allow write: if isOwner(uid) || isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.pending == true);
     }
 
     // Locations — all signed-in users can read and add new ones (so a

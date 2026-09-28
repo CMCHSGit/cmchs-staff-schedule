@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, getDocs, addDoc, deleteDoc, doc, updateDoc,
+  collection, getDocs, addDoc, deleteDoc, doc, setDoc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -163,9 +163,11 @@ function LocationsTab() {
 
 /* ── Users tab ── */
 function UsersTab() {
-  const [users,   setUsers]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [toast,   setToast]   = useState(null)
+  const [users,      setUsers]      = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [toast,      setToast]      = useState(null)
+  const [rosterText, setRosterText] = useState('')
+  const [showImport, setShowImport] = useState(false)
 
   useEffect(() => { load() }, [])
 
@@ -180,6 +182,44 @@ function UsersTab() {
     setUsers(prev => prev.map(u => u.uid === uid ? { ...u, [field]: value } : u))
   }
 
+  /**
+   * Creates placeholder records for staff who haven't signed in yet, from a
+   * pasted "Name, Team" list (one per line) — deliberately not hardcoded
+   * anywhere in this file, since that would put a real staff roster into
+   * this repo's (public) git history. AuthContext.jsx auto-claims one of
+   * these by first name the first time that person actually signs in, only
+   * when the match is unambiguous — see its comment for why.
+   */
+  async function importFromExcel() {
+    const lines = rosterText.split('\n').map(l => l.trim()).filter(Boolean)
+    const existingIds = new Set(users.map(u => u.uid))
+    const realFirstNames = new Set(
+      users.filter(u => !u.pending).map(u => (u.displayName || '').split(' ')[0].toLowerCase())
+    )
+    let created = 0, skipped = 0, invalid = 0
+    for (const line of lines) {
+      const [namePart, teamPart] = line.split(',').map(s => s?.trim())
+      const team = TEAMS.find(t => t.toLowerCase() === (teamPart || '').toLowerCase())
+      if (!namePart || !team) { invalid++; continue }
+      const id = 'pending-' + namePart.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '')
+      const firstName = namePart.split(' ')[0].toLowerCase()
+      if (existingIds.has(id) || realFirstNames.has(firstName)) { skipped++; continue }
+      await setDoc(doc(db, 'users', id), {
+        displayName: namePart,
+        team,
+        role:        'user',
+        excelName:   namePart,
+        pending:     true,
+        createdAt:   serverTimestamp(),
+      })
+      created++
+    }
+    showToast(`Imported ${created} new, skipped ${skipped} existing, ${invalid} invalid lines`)
+    setRosterText('')
+    setShowImport(false)
+    load()
+  }
+
   function showToast(msg) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
@@ -191,6 +231,36 @@ function UsersTab() {
       <p className="text-sm text-muted px-16" style={{ marginBottom: 12, lineHeight: 1.5 }}>
         Assign teams and roles. Most people pick their team on first sign-in; change it here if needed.
       </p>
+
+      <div style={{ padding: '0 16px 16px' }}>
+        <button className="btn btn-sm" onClick={() => setShowImport(v => !v)}>
+          {showImport ? 'Cancel import' : 'Import staff from Excel'}
+        </button>
+        {showImport && (
+          <div style={{ marginTop: 8 }}>
+            <p className="text-sm text-muted" style={{ marginBottom: 6, lineHeight: 1.4 }}>
+              Paste one person per line, as <code>Name, Team</code> — e.g. <code>Karen, Admin</code>.
+              Adds a placeholder for anyone who hasn't signed in yet (safe to run more than
+              once — already-imported or already-real people are skipped). When most people
+              first sign in for real, this app automatically finds and adopts their matching
+              placeholder's team by first name — except where a first name isn't unique across
+              your pasted list (e.g. two "Mark"s), which is left for you to sort out by hand,
+              since guessing wrong there is worse than asking.
+            </p>
+            <textarea
+              className="input"
+              rows={8}
+              style={{ fontFamily: 'monospace', fontSize: 13 }}
+              placeholder={'Karen, Admin\nJan, Admin\nMark, Management\n...'}
+              value={rosterText}
+              onChange={e => setRosterText(e.target.value)}
+            />
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={importFromExcel}>
+              Import
+            </button>
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}>
@@ -208,7 +278,7 @@ function UsersTab() {
                   )}
                 </div>
                 <div className="text-sm text-muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {u.email}
+                  {u.pending ? '⏳ Not signed in yet' : u.email}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
