@@ -47,30 +47,31 @@ Taken"), Start Date, End Date, Hours Requested, Status, Comments.
       for that day, or only fill in blank days?
 - [ ] **End-to-end test** with a real approved leave request once built.
 
-## Excel sync (in progress)
+## Excel sync (built, needs the manual setup steps + real-world testing)
 
-Goal: both this app and the existing OneDrive/SharePoint Excel schedule stay editable and
-in sync for now (not a one-way mirror yet — that's the eventual goal once people are fully
-transitioned off Excel, but not yet).
+Confirmed with Peter: **one-way (app → Excel)** for now, not full two-way — Excel has no
+reliable per-cell change timestamp to resolve a genuine conflict with. People can still edit
+Excel directly; those edits just don't flow back into the app yet. Matches Peter's own
+stated eventual goal (Excel becomes read-only once the transition is complete).
 
-File: `Cass & CHS SharePoint - Documents\CMCHS Files\Admin\Cass Admin\Staff Schedule\CMCHS Staff Schedule 2024.xlsx`
-(a local, OneDrive/SharePoint-synced path — readable directly from this machine for
-investigation, but the live sync itself will need Microsoft Graph API access since it must
-work for everyone, not just from this one machine).
+File: `Cass & CHS SharePoint - Documents\CMCHS Files\Admin\Cass Admin\Staff Schedule\CMCHS Staff Schedule 2024.xlsx`.
+Full design + what was learned about the workbook's actual structure (one sheet per week,
+~140 of them, inconsistent sheet-naming — matched by date instead — AM/PM rows, D–H = Mon–Fri,
+I = per-person Comments) is in `C:\Users\PeterLin\.claude\plans\atomic-baking-noodle.md`.
 
-Structure found so far: **one sheet per week**, named after that week's start date (e.g.
-`28-Sept`), going back to January 2024 — sheet-name date formatting is inconsistent across
-~2 years of manual maintenance (`08-APR-24`, `15-April-24`, `2-Sep-24`, some missing the year
-entirely), plus a `Template (don't use)` sheet used as the copy-source for new weeks. Each
-sheet is heavily merged-cell based (AM/PM rows per person, merged into one cell when both
-halves match, e.g. a whole day/week of Leave or Non-Working Days).
+Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedule.jsx`'s
+`saveSchedule()`, using each user's new `excelName` field (Admin → Users) to find their row.
 
-- [ ] Finish inspecting one current-week sheet's actual cell values/fill colors (in progress)
-      to nail down the exact column layout and color-to-status mapping before writing any
-      sync code.
-- [ ] Design the write path (app → Excel) and read path (Excel → app), and how conflicts are
-      detected/resolved when both change around the same time.
-- [ ] Design how a new week's sheet gets created to match (copy `Template (don't use)`?) so
-      the app doesn't have to assume a sheet already exists for an upcoming week.
-- [ ] Set up Graph API `Files.ReadWrite` access (needs the same Entra ID admin consent step
-      as above).
+- [x] Inspect the actual workbook structure (sheets, columns, merged cells, comments column).
+- [x] Design + build the sync function, the `excelName` admin field, and the save-time trigger.
+- [ ] **Grant `Files.ReadWrite` (Application) + admin consent** on the existing Azure app
+      registration, and generate a new client secret for it (`AZURE_CLIENT_SECRET`).
+- [ ] **Resolve `SHAREPOINT_SITE_ID`** via Graph Explorer — confirm this file is actually on a
+      SharePoint site (not a personal OneDrive) and get its site ID.
+- [ ] Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_FILE_PATH` in Vercel env vars.
+- [ ] Set `excelName` for at least one real test user in Admin → Users.
+- [ ] End-to-end test: save that user's schedule for the *current* week and confirm the Excel
+      file actually updates; also test a week with no existing sheet yet (should skip
+      cleanly, not error) and a user with no `excelName` set (should also skip cleanly).
+- [ ] Not yet built, deliberately deferred: auto-creating a new week's sheet when one doesn't
+      exist yet (currently just skips) — a v2 once the read/write path is proven solid.
