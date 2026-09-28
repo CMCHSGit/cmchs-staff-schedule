@@ -239,13 +239,15 @@ function UsersTab() {
         {showImport && (
           <div style={{ marginTop: 8 }}>
             <p className="text-sm text-muted" style={{ marginBottom: 6, lineHeight: 1.4 }}>
-              Paste one person per line, as <code>Name, Team</code> — e.g. <code>Karen, Admin</code>.
-              Adds a placeholder for anyone who hasn't signed in yet (safe to run more than
-              once — already-imported or already-real people are skipped). When most people
-              first sign in for real, this app automatically finds and adopts their matching
-              placeholder's team by first name — except where a first name isn't unique across
-              your pasted list (e.g. two "Mark"s), which is left for you to sort out by hand,
-              since guessing wrong there is worse than asking.
+              Paste one person per line, as <code>Name, Team</code> — e.g. <code>Karen, Admin</code>
+              or <code>Mark Henderwood, Application</code> for someone who shares a first name
+              with someone else on the list. Adds a placeholder for anyone who hasn't signed in
+              yet (safe to run more than once — already-imported or already-real people are
+              skipped). When someone first signs in for real, this app automatically finds and
+              adopts their matching placeholder's team — by email guess (first.last@) when a
+              full name was pasted, otherwise by first name, and only when that's unambiguous.
+              A first-name-only entry that turns out to collide with someone else is left for
+              you to sort out by hand rather than guessed at.
             </p>
             <textarea
               className="input"

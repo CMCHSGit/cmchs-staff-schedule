@@ -3,30 +3,51 @@ import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore'
 import { auth, db, microsoftProvider } from '../firebase'
 
+/** first.last@ pattern guesses for a full "First Last" name — company uses both domains. */
+function guessedEmails(fullName) {
+  const parts = fullName.trim().toLowerCase().split(/\s+/)
+  if (parts.length < 2) return []
+  const key = `${parts[0]}.${parts[parts.length - 1]}`
+  return [`${key}@cass.co.nz`, `${key}@chsnz.co.nz`]
+}
+
 /**
  * Admin → Users can bulk-create "pending" placeholder profiles (team,
  * excelName) for staff who haven't signed in yet, keyed by a made-up id
  * rather than their eventual real uid (which doesn't exist until they do).
- * On an actual first sign-in, adopt one of those placeholders by matching
- * first name — but only when exactly one pending record shares it. Two
- * pending people with the same first name (e.g. two "Mark"s) are left
- * alone rather than guessed at; an admin sorts those out by hand, since a
- * wrong auto-merge silently hands someone the wrong team assignment.
+ * On an actual first sign-in, adopt one of those placeholders — preferring
+ * an email match (reliable even for two pending people sharing a first
+ * name, e.g. two "Mark"s, as long as the pending record has a full name to
+ * guess an email from) and falling back to first-name matching otherwise,
+ * only when exactly one pending record shares that name. A genuinely
+ * ambiguous case (shared first name, no full name to disambiguate with) is
+ * left alone rather than guessed at — an admin sorts it out by hand, since
+ * a wrong auto-merge silently hands someone the wrong team assignment.
  */
 async function claimPendingProfile(firebaseUser) {
+  const email = (firebaseUser.email || '').toLowerCase()
   const firstName = (firebaseUser.displayName || '').trim().split(/\s+/)[0]?.toLowerCase()
-  if (!firstName) return null
 
   const snap = await getDocs(query(collection(db, 'users'), where('pending', '==', true)))
-  const matches = snap.docs.filter(d => {
+  const pendingDocs = snap.docs
+
+  if (email) {
+    const emailMatches = pendingDocs.filter(d => guessedEmails(d.data().displayName || '').includes(email))
+    if (emailMatches.length === 1) {
+      await deleteDoc(emailMatches[0].ref)
+      return emailMatches[0].data()
+    }
+  }
+
+  if (!firstName) return null
+  const nameMatches = pendingDocs.filter(d => {
     const pendingFirst = (d.data().displayName || '').trim().split(/\s+/)[0]?.toLowerCase()
     return pendingFirst === firstName
   })
-  if (matches.length !== 1) return null
+  if (nameMatches.length !== 1) return null
 
-  const pending = matches[0]
-  await deleteDoc(pending.ref)
-  return pending.data()
+  await deleteDoc(nameMatches[0].ref)
+  return nameMatches[0].data()
 }
 
 const AuthContext = createContext(null)
