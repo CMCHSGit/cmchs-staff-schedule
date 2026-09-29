@@ -23,13 +23,13 @@ a date in the Leave calendar books leave for a person over a date range.
 - [ ] **#4** Excel sync still writes text only, not the Excel fill colours — possible follow-up once
       the sync is live and proven.
 
-## Move off Vercel to GitHub only (started 2026-09-29)
+## Move off Vercel to GitHub only (live on GitHub Pages since 2026-09-29)
 
 Code is done (`.github/workflows/`, `scripts/`); these are the setup steps.
 
-- [ ] **#25** Add the Actions secrets (Settings → Secrets and variables → Actions) — see README §6.
-- [ ] **#26** Pages → Source "GitHub Actions", then Actions → "Deploy site" → Run workflow; check it goes green.
-- [ ] **#27** Pages custom domain `schedule.chsnz.co.nz` + DNS CNAME → `cmchsgit.github.io`.
+- [x] **#25** Add the Actions secrets (Settings → Secrets and variables → Actions) — see README §6.
+- [x] **#26** Pages → Source "GitHub Actions", then Actions → "Deploy site" → Run workflow; check it goes green.
+- [x] **#27** Pages custom domain `schedule.chsnz.co.nz` + DNS CNAME → `cmchsgit.github.io`.
 - [ ] **#28** Test sign-in, saving, and a manual run of "Thursday reminder" on the new site.
 - [ ] **#29** Delete the Vercel project once the new site has worked for a few days.
 - [ ] **#30** Optional: email reminders — sign up at resend.com, verify `chsnz.co.nz` (DNS
