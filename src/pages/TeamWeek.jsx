@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Printer, Copy, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, addDaysISO, weekDates, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
+import { getCurrentWeekStart, addDaysISO, weekDates, fromISO, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, INK } from '../utils/status'
 import { groupByTeam } from '../utils/teams'
@@ -24,7 +25,14 @@ export default function TeamWeek() {
   const { user, profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
 
-  const [weekOffset, setWeekOffset] = useState(0)
+  // Arriving from My week's Save: open on the week just saved, then scroll to
+  // and briefly highlight that person's row (see the effect further down).
+  const location = useLocation()
+  const navigate = useNavigate()
+  const arrival = location.state
+  const [weekOffset, setWeekOffset] = useState(() => arrival?.weekStart
+    ? Math.round((fromISO(arrival.weekStart) - fromISO(getCurrentWeekStart(0))) / (7 * 864e5))
+    : 0)
   const weekStart = getCurrentWeekStart(weekOffset)
   const prevWeek = addDaysISO(weekStart, -7)
   const [dayIdx, setDayIdx] = useState(() => Math.max(0, todayIndex(getCurrentWeekStart(0))))
@@ -174,6 +182,20 @@ export default function TeamWeek() {
   const commentPerson = commenting && users.find(u => u.uid === commenting)
   const loading = usersLoading || schedLoading
 
+  useEffect(() => {
+    if (loading || !arrival?.focusUid) return
+    if (arrival.toast) showToast(arrival.toast)
+    // Whichever layout is showing (desktop grid or phone list) has the row visible.
+    const row = [...document.querySelectorAll(`[data-uid="${arrival.focusUid}"]`)].find(el => el.offsetParent)
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      row.classList.add('row-flash')
+      setTimeout(() => row.classList.remove('row-flash'), 2400)
+    }
+    // Forget the arrival, so a refresh or coming back later doesn't replay it.
+    navigate(location.pathname, { replace: true, state: null })
+  }, [loading, arrival, showToast, navigate, location.pathname])
+
   return (
     <div className="page">
       <div className="page-head">
@@ -235,7 +257,7 @@ export default function TeamWeek() {
                   <span className="wk-group-count">{g.members.length} {g.members.length === 1 ? 'person' : 'people'}</span>
                 </div>
                 {g.members.map(u => (
-                  <div key={u.uid} className="wk-cols wk-row">
+                  <div key={u.uid} className="wk-cols wk-row" data-uid={u.uid}>
                     <div className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`} title={u.displayName}>{nameLabel(u)}</div>
                     {WEEK_DAYS.map((_, i) => {
                       const c = cell(u, i)
@@ -269,7 +291,7 @@ export default function TeamWeek() {
                   const c = cell(u, dayIdx)
                   const Tagname = canEdit(u) ? 'button' : 'div'
                   return (
-                    <div key={u.uid} className="wkm-row">
+                    <div key={u.uid} className="wkm-row" data-uid={u.uid}>
                       <Tagname
                         type={canEdit(u) ? 'button' : undefined}
                         className="wkm-main"

@@ -401,6 +401,13 @@ textarea.input { resize: vertical; min-height: 76px; }
   background: #FF7C80; color: var(--ink); font: var(--type-body-strong);
 }
 
+/* Pages fade in on arrival; a saved row in Team week flashes purple once. */
+.page { animation: page-in var(--duration-base) var(--ease-out); }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+.row-flash { animation: row-flash 2.2s var(--ease-standard); border-radius: var(--radius-sm); }
+@keyframes row-flash { 0%, 35% { box-shadow: 0 0 0 3px var(--chs-purple-60); background-color: var(--chs-purple-20); } 100% { box-shadow: 0 0 0 3px transparent; } }
+@media (prefers-reduced-motion: reduce) { .page, .row-flash { animation: none; } }
+
 /* My week on desktop: the five days side by side like the Team week grid,
    week picker + "fill every day" on one row, comments beside Save. Below
    1000px it stays the single phone column. */

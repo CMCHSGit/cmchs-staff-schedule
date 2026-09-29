@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { flushSync } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import { Bell, Share, Phone, Info, CalendarClock } from 'lucide-react'
 import { db } from '../firebase'
@@ -17,6 +19,7 @@ import { Alert, Badge, Button, Tag, Loading, Spinner } from '../components/ui'
 
 export default function MySchedule() {
   const { user, profile } = useAuth()
+  const navigate = useNavigate()
   const team = profile?.team
   const teamCfg = getTeamConfig(team)
 
@@ -127,12 +130,28 @@ export default function MySchedule() {
       const person = { uid: user.uid, displayName: profile?.displayName || user.displayName, email: user.email, team }
       const saved = await writeSchedule({ person, weekStart, days: schedule, comments, editorUid: user.uid, existing })
       setExisting(saved)
-      showToast('Schedule saved.')
+      showTeamWeek()
     } catch (e) {
       showToast('Save failed — try again.')
     } finally {
       setSaving(false)
     }
+  }
+
+  /**
+   * After a save, go to Team week on that same week and land on this person's
+   * row — it loads fresh there, so the update is right in front of them.
+   * Cross-fades where the browser supports it (View Transitions); otherwise
+   * the page's own fade-in covers it.
+   */
+  function showTeamWeek() {
+    const go = () => {
+      window.scrollTo(0, 0)
+      navigate('/team', { state: { weekStart, focusUid: user.uid, toast: 'Schedule saved — here it is in Team week.' } })
+    }
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (document.startViewTransition && !calm) document.startViewTransition(() => flushSync(go))
+    else go()
   }
 
   const isComplete = schedule.every((d, i) => d.location || callsDays[i] || holidays[i])
