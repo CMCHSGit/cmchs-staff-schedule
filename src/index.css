@@ -658,6 +658,8 @@ button.wkm-main { cursor: pointer; }
   .admin-people-head { display: grid; padding-top: 10px; padding-bottom: 10px; background: var(--surface-subtle); }
   .admin-people-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
 }
+.admin-lock { max-width: 380px; margin: 40px auto 0; padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; }
+.admin-lock-icon { align-self: center; color: var(--accent-fg); }
 .version-note { text-align: center; font: var(--type-caption); color: var(--text-muted); padding: 8px 0 16px; }
 code { font-family: var(--font-mono); font-size: .92em; }
 

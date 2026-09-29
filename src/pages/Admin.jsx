@@ -5,15 +5,73 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { Bell } from 'lucide-react'
+import { Bell, Lock } from 'lucide-react'
 import Toast from '../components/Toast'
 import { TEAMS, teamLabel } from '../utils/teams'
 import { Badge, Button, Loading } from '../components/ui'
 import { APP_VERSION } from '../version'
 
+/**
+ * Admin also asks for a password — a second step on top of the admin role,
+ * useful on an admin's unlocked phone or computer. Only its SHA-256 is kept
+ * here (this repo is public), but this is a lock on the door, not a safe:
+ * it runs in the browser. What actually protects admin actions is the role
+ * check plus firestore.rules. Stays unlocked until the tab/app is closed.
+ */
+const ADMIN_PASSWORD_SHA256 = '8c1d16397760afa8d5301e4461e28f5f48f7e8ba20de33e32a259e9bedd7fecb'
+const UNLOCK_KEY = 'css_admin_unlocked'
+
+async function sha256(text) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+  return [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function isUnlocked() {
+  try { return sessionStorage.getItem(UNLOCK_KEY) === ADMIN_PASSWORD_SHA256 } catch { return false }
+}
+
+function AdminLock({ onUnlock }) {
+  const [password, setPassword] = useState('')
+  const [wrong, setWrong] = useState(false)
+  const [checking, setChecking] = useState(false)
+
+  async function submit(e) {
+    e.preventDefault()
+    setChecking(true)
+    const hash = await sha256(password)
+    setChecking(false)
+    if (hash !== ADMIN_PASSWORD_SHA256) { setWrong(true); setPassword(''); return }
+    try { sessionStorage.setItem(UNLOCK_KEY, hash) } catch { /* private mode — unlocked for this visit only */ }
+    onUnlock()
+  }
+
+  return (
+    <div className="page page-narrow">
+      <form className="card admin-lock" onSubmit={submit}>
+        <Lock size={28} aria-hidden="true" className="admin-lock-icon" />
+        <h1 className="page-title">Admin</h1>
+        <p className="text-sm text-muted">Enter the admin password to continue.</p>
+        <input
+          className="input"
+          type="password"
+          autoFocus
+          autoComplete="current-password"
+          placeholder="Password"
+          aria-label="Admin password"
+          value={password}
+          onChange={e => { setPassword(e.target.value); setWrong(false) }}
+        />
+        {wrong && <p className="login-error">That password isn’t right — try again.</p>}
+        <Button type="submit" block disabled={!password || checking}>Unlock</Button>
+      </form>
+    </div>
+  )
+}
+
 export default function Admin() {
   const { profile } = useAuth()
   const [tab, setTab] = useState('locations')
+  const [unlocked, setUnlocked] = useState(isUnlocked)
 
   if (profile?.role !== 'admin') {
     return (
@@ -22,6 +80,8 @@ export default function Admin() {
       </div>
     )
   }
+
+  if (!unlocked) return <AdminLock onUnlock={() => setUnlocked(true)} />
 
   return (
     <div className="page admin-page">
