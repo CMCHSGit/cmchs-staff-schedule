@@ -32,6 +32,9 @@ Code is done (`.github/workflows/`, `scripts/`); these are the setup steps.
 - [ ] **#27** Pages custom domain `schedule.chsnz.co.nz` + DNS CNAME → `cmchsgit.github.io`.
 - [ ] **#28** Test sign-in, saving, and a manual run of "Thursday reminder" on the new site.
 - [ ] **#29** Delete the Vercel project once the new site has worked for a few days.
+- [ ] **#30** Optional: email reminders — sign up at resend.com, verify `chsnz.co.nz` (DNS
+      records, maybe with IT), then add `RESEND_API_KEY` + `RESEND_FROM` secrets. Until then
+      the Thursday reminder is push-notification only.
 
 ## Smartly leave integration (parked — pick up later)
 
