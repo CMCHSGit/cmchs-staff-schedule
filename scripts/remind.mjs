@@ -10,7 +10,8 @@
  *     their device or a token has gone stale
  *
  * Env (GitHub Actions secrets): FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL,
- * FIREBASE_PRIVATE_KEY, RESEND_API_KEY, RESEND_FROM, APP_URL.
+ * FIREBASE_PRIVATE_KEY, APP_URL, and optionally RESEND_API_KEY + RESEND_FROM —
+ * without those, email is skipped and reminders go out as push only.
  * The repo is public and so are its Action logs — only ever log counts.
  */
 
@@ -144,9 +145,10 @@ async function main() {
   // Placeholder (not-signed-in) people have no email, so drop out here.
   const pending = users.filter(u => u.email && !submittedUids.has(u.uid))
 
-  const emailResults = await Promise.allSettled(
-    pending.map(u => sendReminderEmail(u.email, u.displayName?.split(' ')[0], weekStart))
-  )
+  const emailOn = !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM)
+  const emailResults = emailOn
+    ? await Promise.allSettled(pending.map(u => sendReminderEmail(u.email, u.displayName?.split(' ')[0], weekStart)))
+    : []
   const pushResults = await Promise.allSettled(
     pending.map(u => sendPushToUser(db, u, weekStart))
   )
@@ -156,7 +158,7 @@ async function main() {
   const pushSent   = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.sent : 0), 0)
   const pushFailed = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.failed : 1), 0)
 
-  console.log(`Reminders for week ${weekStart}: ${pending.length} due; email ${sent} sent/${failed} failed, push ${pushSent} sent/${pushFailed} failed`)
+  console.log(`Reminders for week ${weekStart}: ${pending.length} due; email ${emailOn ? `${sent} sent/${failed} failed` : 'off (Resend not set up)'}, push ${pushSent} sent/${pushFailed} failed`)
   if (failed) process.exitCode = 1 // shows as a failed run in GitHub, without naming anyone
 }
 
