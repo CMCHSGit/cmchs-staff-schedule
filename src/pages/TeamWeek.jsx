@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Printer, Copy } from 'lucide-react'
+import { Printer, Copy, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, addDaysISO, weekDates, todayIndex, normalizeSchedule, WEEK_DAYS, dayMonth } from '../utils/week'
+import { getCurrentWeekStart, addDaysISO, weekDates, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, INK } from '../utils/status'
-import { groupByTeam, doesCustomerCalls } from '../utils/teams'
+import { groupByTeam } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { weekConflicts, onLeave } from '../utils/weekInsights'
 import { writeSchedule, syncToExcel, addNewLocations } from '../utils/scheduleStore'
@@ -16,6 +16,7 @@ import LeavePin from '../components/LeavePin'
 import WeekAlerts from '../components/WeekAlerts'
 import Legend from '../components/Legend'
 import EditDrawer from '../components/EditDrawer'
+import CommentDrawer from '../components/CommentDrawer'
 import Toast, { useToast } from '../components/Toast'
 import { Button, Loading } from '../components/ui'
 
@@ -30,6 +31,7 @@ export default function TeamWeek() {
   const [query, setQuery] = useState('')
   const [teamSel, setTeamSel] = useState([])
   const [editing, setEditing] = useState(null) // { uid, dayIdx }
+  const [commenting, setCommenting] = useState(null) // uid
   const [copying, setCopying] = useState(false)
   const [toast, showToast] = useToast()
 
@@ -46,19 +48,35 @@ export default function TeamWeek() {
   const holidays = dates.map(holidayOn)
   const today = todayIndex(weekStart)
 
+  // Each person's week with the roster's customer-calls cover folded in —
+  // calls are rostered on the On-call page, not entered by each person.
+  const weekOf = useMemo(
+    () => new Map(sorted.map(u => [u.uid, daysWithCalls(schedules[u.uid]?.days, oncall, u.uid)])),
+    [sorted, schedules, oncall]
+  )
+
   const people = filterPeople(sorted, names, query, teamSel)
   const groups = groupByTeam(people)
   const teamOptions = groupByTeam(sorted)
   const conflicts = isAdmin ? weekConflicts({ weekStart, users: sorted, schedules, oncall, names }) : []
   const leaveToday = onLeave({ weekStart, dayIdx, users: people, schedules })
   const hasEntries = Object.keys(schedules).length > 0
-  const notFilled = sorted.filter(u => !schedules[u.uid]).length
+  const notFilled = sorted.filter(u => !weekOf.get(u.uid).some(d => d.location || d.onCall)).length
 
   const canEdit = u => isAdmin || u.uid === user.uid
-  const cell = (u, i) => describeDay(schedules[u.uid]?.days?.[i], holidays[i])
+  const cell = (u, i) => describeDay(weekOf.get(u.uid)?.[i], holidays[i])
+  const commentOf = u => schedules[u.uid]?.comments || ''
   const nameLabel = u => (oncall?.uid === u.uid ? `${names.get(u.uid)} - OnCall` : names.get(u.uid))
 
-  async function saveEdit(person, days, comments, typed) {
+  function saveFailed(e) {
+    console.error(e)
+    showToast(e.code === 'permission-denied'
+      ? 'Not allowed yet — the updated database rules need publishing.'
+      : 'Save failed — try again.')
+  }
+
+  async function saveEdit(person, days, typed) {
+    const comments = commentOf(person)
     try {
       const fresh = await addNewLocations([typed], locations)
       if (fresh.length) setLocations(prev => [...prev, ...fresh])
@@ -66,20 +84,33 @@ export default function TeamWeek() {
       patch(weekStart, person.uid, saved)
       setEditing(null)
       showToast('Saved.')
-      syncToExcel(user, weekStart, [{ uid: person.uid, days, comments }])
+      syncToExcel(user, weekStart, [{ uid: person.uid, days: daysWithCalls(days, oncall, person.uid), comments }])
     } catch (e) {
-      console.error(e)
-      showToast(e.code === 'permission-denied'
-        ? 'Not allowed yet — the updated database rules need publishing.'
-        : 'Save failed — try again.')
+      saveFailed(e)
+    }
+  }
+
+  /** The week's comment on its own — the whereabouts panel no longer carries it. */
+  async function saveComment(person, comments) {
+    const existing = schedules[person.uid]
+    const days = normalizeSchedule(existing?.days)
+    try {
+      const saved = await writeSchedule({ person, weekStart, days, comments, editorUid: user.uid, existing })
+      patch(weekStart, person.uid, saved)
+      setCommenting(null)
+      showToast(comments.trim() ? 'Comment saved.' : 'Comment cleared.')
+      syncToExcel(user, weekStart, [{ uid: person.uid, days: daysWithCalls(days, oncall, person.uid), comments }])
+    } catch (e) {
+      saveFailed(e)
     }
   }
 
   /**
    * Fills this week for everyone who hasn't started it, from what they had
    * last week — never overwrites anything already entered. Leave and public
-   * holidays aren't carried over. Marked needsConfirm, so people still get
-   * Thursday's reminder to check it.
+   * holidays aren't carried over, and neither is customer calls cover, which
+   * is rostered per week on the On-call page. Marked needsConfirm, so people
+   * still get Thursday's reminder to check it.
    */
   async function copyLastWeek() {
     const last = byWeek[prevWeek] || {}
@@ -93,11 +124,12 @@ export default function TeamWeek() {
       for (const u of targets) {
         const days = normalizeSchedule(last[u.uid].days).map((d, i) => {
           const status = describeDay(d).status
-          return holidays[i] || status === 'leave' || status === 'holiday' ? { location: '', onCall: false } : d
+          const carry = holidays[i] || status === 'leave' || status === 'holiday' ? '' : d.location
+          return { location: carry, onCall: false }
         })
         const saved = await writeSchedule({ person: u, weekStart, days, comments: '', editorUid: user.uid, existing: null, extra: { copiedFrom: prevWeek } })
         patch(weekStart, u.uid, saved)
-        synced.push({ uid: u.uid, days, comments: '' })
+        synced.push({ uid: u.uid, days: daysWithCalls(days, oncall, u.uid), comments: '' })
       }
       showToast(`Copied from week starting ${dayMonth(prevWeek)}. Leave and holidays were not carried over.`)
       syncToExcel(user, weekStart, synced)
@@ -111,7 +143,40 @@ export default function TeamWeek() {
     }
   }
 
+  /** The Comments column — its own button, so leaving a note never means opening a day. */
+  const commentCell = u => {
+    const text = commentOf(u)
+    if (!canEdit(u) && !text) return <div className="wk-comment" />
+    return (
+      <button
+        type="button"
+        className={`wk-comment${text ? '' : ' wk-comment-empty'}`}
+        title={text || `Add a comment for ${names.get(u.uid)}`}
+        onClick={() => setCommenting(u.uid)}
+      >
+        {text || <><MessageSquare size={13} aria-hidden="true" />Comment</>}
+      </button>
+    )
+  }
+
+  /** The same button on a phone, where the grid only has room for an icon. */
+  const commentButton = u => {
+    const text = commentOf(u)
+    if (!canEdit(u) && !text) return null
+    return (
+      <button
+        type="button"
+        className={`wkm-comment${text ? ' has-note' : ''}`}
+        aria-label={text ? `Comment for ${names.get(u.uid)}` : `Add a comment for ${names.get(u.uid)}`}
+        onClick={() => setCommenting(u.uid)}
+      >
+        <MessageSquare size={18} aria-hidden="true" />
+      </button>
+    )
+  }
+
   const editPerson = editing && users.find(u => u.uid === editing.uid)
+  const commentPerson = commenting && users.find(u => u.uid === commenting)
   const loading = usersLoading || schedLoading
 
   return (
@@ -121,7 +186,7 @@ export default function TeamWeek() {
           <h1 className="page-title">Team week</h1>
           {!loading && (
             <span className="page-sub">
-              {sorted.length} people · {notFilled ? `${notFilled} not filled in yet` : 'everyone has filled in'} · tap {isAdmin ? 'anyone' : 'your row'} to update
+              {sorted.length} people · {notFilled ? `${notFilled} not filled in yet` : 'everyone has filled in'} · tap {isAdmin ? 'anyone' : 'your row'} to update, or Comments to leave a note
             </span>
           )}
         </div>
@@ -193,7 +258,7 @@ export default function TeamWeek() {
                         </Tagname>
                       )
                     })}
-                    <div className="wk-comment" title={schedules[u.uid]?.comments || undefined}>{schedules[u.uid]?.comments}</div>
+                    {commentCell(u)}
                   </div>
                 ))}
               </div>
@@ -209,15 +274,17 @@ export default function TeamWeek() {
                   const c = cell(u, dayIdx)
                   const Tagname = canEdit(u) ? 'button' : 'div'
                   return (
-                    <Tagname
-                      key={u.uid}
-                      type={canEdit(u) ? 'button' : undefined}
-                      className="wkm-row"
-                      onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx }) : undefined}
-                    >
-                      <span className={`wkm-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>{nameLabel(u)}</span>
-                      <span className={`wkm-day${c.empty ? ' blank' : ''}`} style={{ background: c.bg, ...(c.filled && { color: INK }) }}>{c.text || 'No entry'}</span>
-                    </Tagname>
+                    <div key={u.uid} className="wkm-row">
+                      <Tagname
+                        type={canEdit(u) ? 'button' : undefined}
+                        className="wkm-main"
+                        onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx }) : undefined}
+                      >
+                        <span className={`wkm-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>{nameLabel(u)}</span>
+                        <span className={`wkm-day${c.empty ? ' blank' : ''}`} style={{ background: c.bg, ...(c.filled && { color: INK }) }}>{c.text || 'No entry'}</span>
+                      </Tagname>
+                      {commentButton(u)}
+                    </div>
                   )
                 })}
               </div>
@@ -235,9 +302,21 @@ export default function TeamWeek() {
           dayIdx={editing.dayIdx}
           schedule={schedules[editPerson.uid]}
           locations={locations}
-          showCalls={doesCustomerCalls(editPerson.team) || normalizeSchedule(schedules[editPerson.uid]?.days).some(d => d.onCall)}
-          onSave={(days, comments, typed) => saveEdit(editPerson, days, comments, typed)}
+          calls={!!weekOf.get(editPerson.uid)?.[editing.dayIdx]?.onCall}
+          onSave={(days, typed) => saveEdit(editPerson, days, typed)}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {commentPerson && (
+        <CommentDrawer
+          name={names.get(commentPerson.uid)}
+          isSelf={commentPerson.uid === user.uid}
+          weekStart={weekStart}
+          comments={commentOf(commentPerson)}
+          readOnly={!canEdit(commentPerson)}
+          onSave={comments => saveComment(commentPerson, comments)}
+          onClose={() => setCommenting(null)}
         />
       )}
 

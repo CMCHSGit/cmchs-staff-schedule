@@ -27,6 +27,10 @@ export const STATUS = {
 /** Name-cell fill for whoever is on the weekly on-call roster ("Sam - OnCall" in Excel). */
 export const ONCALL_BG = '#FF7C80'
 
+/** What the Leave calendar offers when booking someone's time away — each one
+ * reads back as Leave (or Training) via statusOf. */
+export const LEAVE_TYPES = ['Annual Leave', 'Sick Leave', 'Lieu Day', 'Bereavement Leave', 'Parental Leave', 'Unpaid Leave', 'Training']
+
 /** Order the Day view lists groups in. */
 export const STATUS_ORDER = ['calls', 'office', 'site', 'remote', 'wfh', 'training', 'leave', 'nwd', 'holiday']
 
@@ -47,6 +51,8 @@ export function statusOf(day) {
   if (/non[\s-]?working|\bnwd\b|\bday off\b/.test(t)) return 'nwd'
   if (/public holiday|stat(utory)? holiday/.test(t)) return 'holiday'
   if (/\bholiday\b/.test(t)) return 'leave' // "on holiday" = annual leave
+  // `onCall` is the customer-calls flag — set on the on-call roster, folded
+  // into the day by daysWithCalls() before anything here sees it.
   if (day?.onCall || /customer call|\bon[\s-]?call\b/.test(t)) return 'calls'
   if (!t) return null
   if (/\btraining\b/.test(t)) return 'training'

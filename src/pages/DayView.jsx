@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Phone } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, weekStartOf, weekDates, todayIndex, fromISO, WEEK_DAYS, dayMonth } from '../utils/week'
+import { getCurrentWeekStart, weekStartOf, weekDates, todayIndex, fromISO, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, STATUS, STATUS_ORDER, PLAIN, INK } from '../utils/status'
 import { groupByTeam, teamLabel } from '../utils/teams'
@@ -50,7 +50,8 @@ export default function DayView() {
 
   const byStatus = {}
   for (const u of people) {
-    const d = describeDay(schedules[u.uid]?.days?.[dayIdx], holiday)
+    // Customer calls come from the week's on-call roster, not each person's entry.
+    const d = describeDay(daysWithCalls(schedules[u.uid]?.days, oncall, u.uid)[dayIdx], holiday)
     const key = d.status || 'none'
     ;(byStatus[key] ||= []).push({ uid: u.uid, name: names.get(u.uid), note: d.note, meta: [teamLabel(u.team || null), d.note].filter(Boolean).join(' · ') })
   }
@@ -88,7 +89,7 @@ export default function DayView() {
 
       <div className="oncall-banner oncall-strip">
         <Phone size={18} aria-hidden="true" />
-        On call: {oncall ? names.get(oncall.uid) || oncall.displayName : 'Unassigned'}
+        On call: {oncall?.uid ? names.get(oncall.uid) || oncall.displayName : 'Unassigned'}
       </div>
 
       {loading ? <Loading /> : (

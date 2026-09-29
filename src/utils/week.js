@@ -100,3 +100,39 @@ export function normalizeSchedule(days) {
 export function scheduleId(weekStart, uid) {
   return `${weekStart}_${uid}`
 }
+
+/**
+ * Who covers customer calls each weekday, read from the week's on-call doc:
+ * five uids, '' where nobody is rostered. Customer calls are set on the
+ * on-call roster (one cover per day), not by each person on their own week.
+ */
+export function normalizeCalls(calls) {
+  return WEEK_DAYS.map((_, i) => calls?.[i] || '')
+}
+
+/**
+ * One person's week with the roster's customer-calls cover folded in — what
+ * the views and the Excel mirror show. A day's own `onCall` flag still
+ * counts, so weeks filled in before the roster took calls over, and rows
+ * imported from Excel reading "… / Customer Calls", keep looking the same.
+ */
+export function daysWithCalls(days, oncall, uid) {
+  const calls = normalizeCalls(oncall?.calls)
+  return normalizeSchedule(days).map((d, i) => ({ ...d, onCall: d.onCall || (!!uid && calls[i] === uid) }))
+}
+
+/**
+ * Every weekday a date range covers, as { weekStart, dayIdx, iso } — weekends
+ * are skipped, since the schedule is Monday–Friday only.
+ */
+export function weekdaysInRange(from, to) {
+  const out = []
+  if (!from || !to || to < from) return out
+  let iso = from
+  for (let guard = 0; iso <= to && guard < 400; guard++) {
+    const dow = fromISO(iso).getDay()
+    if (dow >= 1 && dow <= 5) out.push({ weekStart: weekStartOf(fromISO(iso)), dayIdx: dow - 1, iso })
+    iso = addDaysISO(iso, 1)
+  }
+  return out
+}

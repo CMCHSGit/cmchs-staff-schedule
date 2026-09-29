@@ -3,17 +3,17 @@ import { doc, getDoc } from 'firebase/firestore'
 import { Bell, Share, Phone, Info, CalendarClock } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, weekDates, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, DEFAULT_LOCATION } from '../utils/week'
+import { getCurrentWeekStart, weekDates, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, daysWithCalls, DEFAULT_LOCATION } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay } from '../utils/status'
-import { getTeamConfig, teamLabel, quickFillsForTeam, doesCustomerCalls } from '../utils/teams'
+import { getTeamConfig, teamLabel, quickFillsForTeam } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
 import { writeSchedule, syncToExcel, addNewLocations } from '../utils/scheduleStore'
 import { useLocations, useOnCall } from '../hooks/useScheduleData'
 import WeekNav from '../components/WeekNav'
 import Toast, { useToast } from '../components/Toast'
 import LocationCombobox from '../components/LocationCombobox'
-import { Alert, Badge, Button, Switch, Tag, Loading, Spinner } from '../components/ui'
+import { Alert, Badge, Button, Tag, Loading, Spinner } from '../components/ui'
 
 export default function MySchedule() {
   const { user, profile } = useAuth()
@@ -37,8 +37,10 @@ export default function MySchedule() {
   const dates = weekDates(weekStart)
   const holidays = dates.map(holidayOn)
   const { byWeek: oncall } = useOnCall([weekStart])
-  const onCallThisWeek = oncall[weekStart]?.uid === user?.uid
-  const showCalls = doesCustomerCalls(team) || schedule.some(d => d.onCall)
+  const roster = oncall[weekStart]
+  const onCallThisWeek = roster?.uid === user?.uid
+  // Customer calls are rostered on the On-call page — shown here, never set here.
+  const callsDays = daysWithCalls(schedule, roster, user?.uid).map(d => d.onCall)
 
   useEffect(() => {
     let unsubscribe = () => {}
@@ -126,7 +128,7 @@ export default function MySchedule() {
       const saved = await writeSchedule({ person, weekStart, days: schedule, comments, editorUid: user.uid, existing })
       setExisting(saved)
       showToast('Schedule saved.')
-      syncToExcel(user, weekStart, [{ uid: user.uid, days: schedule, comments }]) // fire-and-forget mirror
+      syncToExcel(user, weekStart, [{ uid: user.uid, days: daysWithCalls(schedule, roster, user.uid), comments }]) // fire-and-forget mirror
     } catch (e) {
       showToast('Save failed — try again.')
     } finally {
@@ -134,7 +136,7 @@ export default function MySchedule() {
     }
   }
 
-  const isComplete = schedule.every((d, i) => d.location || d.onCall || holidays[i])
+  const isComplete = schedule.every((d, i) => d.location || callsDays[i] || holidays[i])
   const savedAt = existing?.submittedAt
 
   return (
@@ -211,7 +213,7 @@ export default function MySchedule() {
         <div className="day-cards">
           {WEEK_DAYS.map((day, i) => {
             const value = schedule[i]?.location ?? ''
-            const onCall = schedule[i]?.onCall ?? false
+            const onCall = callsDays[i]
             const { bg, fg } = describeDay({ location: value, onCall })
             return (
               <div className="card day-card" key={day}>
@@ -229,8 +231,8 @@ export default function MySchedule() {
                   tintFg={fg}
                   placeholder={holidays[i] ? `${holidays[i]} — or type where you’ll be` : undefined}
                 />
-                {showCalls && (
-                  <Switch checked={onCall} onChange={val => updateDay(i, { onCall: val })} label="Customer calls" />
+                {onCall && (
+                  <span className="day-card-note"><Phone size={14} aria-hidden="true" />Customer calls — rostered on the On-call page</span>
                 )}
               </div>
             )

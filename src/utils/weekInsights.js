@@ -1,20 +1,30 @@
 import { describeDay, statusOf } from './status'
-import { weekDates, WEEK_DAYS, DAY_SHORT, dayMonth } from './week'
+import { weekDates, WEEK_DAYS, DAY_SHORT, dayMonth, normalizeCalls } from './week'
 import { holidayOn } from './holidays'
 
 const DAYS = [0, 1, 2, 3, 4]
 
 const hasCalls = day => !!day?.onCall || statusOf(day) === 'calls'
 
-/** Names of whoever has customer calls each day, or the holiday, or an em dash. */
-export function callsCover({ weekStart, users, schedules, names }) {
-  const dates = weekDates(weekStart)
+/**
+ * Everyone covering customer calls on each weekday: whoever the on-call
+ * roster has down for it, plus anyone whose own entry still says so (weeks
+ * filled in before the roster took calls over, and rows imported from Excel
+ * reading "… / Customer Calls").
+ */
+export function callsCoverUids({ users, schedules, oncall }) {
+  const rostered = normalizeCalls(oncall?.calls)
   return DAYS.map(i => {
-    const holiday = holidayOn(dates[i])
-    if (holiday) return holiday
-    const who = users.filter(u => hasCalls(schedules[u.uid]?.days?.[i])).map(u => names.get(u.uid))
-    return who.join(', ') || '—'
+    const own = users.filter(u => hasCalls(schedules[u.uid]?.days?.[i])).map(u => u.uid)
+    return rostered[i] && !own.includes(rostered[i]) ? [rostered[i], ...own] : own
   })
+}
+
+/** Names of whoever has customer calls each day, or the holiday, or an em dash. */
+export function callsCover({ weekStart, users, schedules, oncall, names }) {
+  const dates = weekDates(weekStart)
+  const cover = callsCoverUids({ users, schedules, oncall })
+  return DAYS.map(i => holidayOn(dates[i]) || cover[i].map(uid => names.get(uid)).filter(Boolean).join(', ') || '—')
 }
 
 /** People on leave on one day of the week. */
@@ -34,7 +44,7 @@ export function weekConflicts({ weekStart, users, schedules, oncall, names }) {
   const holidays = dates.map(holidayOn)
   const out = []
 
-  if (!oncall) {
+  if (!oncall?.uid) {
     out.push({ type: 'oncall', short: 'Unassigned', text: `No one is on call for the week starting ${dayMonth(weekStart)}.` })
   } else {
     const leaveDays = DAYS.filter(i => describeDay(schedules[oncall.uid]?.days?.[i], holidays[i]).status === 'leave')
@@ -48,9 +58,10 @@ export function weekConflicts({ weekStart, users, schedules, oncall, names }) {
   }
 
   if (Object.keys(schedules).length) {
+    const cover = callsCoverUids({ users, schedules, oncall })
     for (const i of DAYS) {
       if (holidays[i]) continue
-      if (!users.some(u => hasCalls(schedules[u.uid]?.days?.[i]))) {
+      if (!cover[i].length) {
         out.push({ type: 'calls', short: 'Calls gap', text: `No customer calls cover on ${WEEK_DAYS[i]} ${dayMonth(dates[i])}.` })
       }
     }
