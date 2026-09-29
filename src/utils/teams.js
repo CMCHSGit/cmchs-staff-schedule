@@ -56,11 +56,6 @@ export function teamLabel(team) {
   return TEAM_CONFIG[team]?.label || team || 'No team'
 }
 
-/** Customer calls are an engineering duty — only they see that switch. */
-export function doesCustomerCalls(team) {
-  return team === 'Engineers'
-}
-
 export function defaultLocationForTeam(team) {
   const cfg = getTeamConfig(team)
   if (cfg) return cfg.defaultLocation

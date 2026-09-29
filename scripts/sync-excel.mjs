@@ -1,7 +1,9 @@
 /**
  * scripts/sync-excel.mjs — run by .github/workflows/excel-sync.yml every 15
  * minutes. Copies every schedule saved (or edited) since the last run into
- * the company's existing Excel schedule via Microsoft Graph — one-way, app →
+ * the company's existing Excel schedule — plus every schedule in any week
+ * whose on-call roster changed, since customer-calls cover lives there and
+ * shows in the Excel cells — via Microsoft Graph — one-way, app →
  * Excel; see TODO.md for why. Never the source of truth: a week with no sheet
  * yet, or a person with no excelName, is simply skipped.
  *
@@ -19,7 +21,7 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app'
 import { getFirestore, Timestamp }      from 'firebase-admin/firestore'
 import { excelCellText }                from '../src/utils/status.js'
 import { holidayOn }                    from '../src/utils/holidays.js'
-import { weekDates, normalizeSchedule } from '../src/utils/week.js'
+import { weekDates, daysWithCalls } from '../src/utils/week.js'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
 const DRIVE_ROOT = `${GRAPH}/sites/${process.env.SHAREPOINT_SITE_ID}/drive/items/${process.env.EXCEL_ITEM_ID}`
@@ -112,6 +114,8 @@ async function readNameColumn(token, sheetName) {
   return (col.values || []).map(r => normaliseName(r[0]))
 }
 
+const chunk = (list, size) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size))
+
 async function main() {
   initFirebase()
   const db = getFirestore()
@@ -119,8 +123,17 @@ async function main() {
   const runStart = Timestamp.now()
   const since = (await stateRef.get()).data()?.lastRun || Timestamp.fromMillis(Date.now() - FIRST_RUN_LOOKBACK_MS)
 
-  const changed = await db.collection('schedules').where('submittedAt', '>', since).get()
-  if (changed.empty) {
+  const [changedSchedules, changedRosters] = await Promise.all([
+    db.collection('schedules').where('submittedAt', '>', since).get(),
+    db.collection('oncall').where('updatedAt', '>', since).get(),
+  ])
+  // A roster change (who has customer calls) alters that whole week's cells.
+  const rosterWeeks = changedRosters.docs.map(d => d.id)
+  const rosterWeekSchedules = rosterWeeks.length
+    ? (await Promise.all(chunk(rosterWeeks, 30).map(ws => db.collection('schedules').where('weekStart', 'in', ws).get()))).flatMap(q => q.docs)
+    : []
+  const changed = new Map([...changedSchedules.docs, ...rosterWeekSchedules].map(d => [d.id, d.data()]))
+  if (!changed.size) {
     await stateRef.set({ lastRun: runStart })
     console.log('Excel sync: nothing new.')
     return
@@ -128,8 +141,7 @@ async function main() {
 
   const users = new Map((await db.collection('users').get()).docs.map(d => [d.id, d.data()]))
   const byWeek = new Map()
-  for (const d of changed.docs) {
-    const s = d.data()
+  for (const s of changed.values()) {
     const excelName = users.get(s.uid)?.excelName
     if (!excelName) continue
     if (!byWeek.has(s.weekStart)) byWeek.set(s.weekStart, [])
@@ -144,11 +156,12 @@ async function main() {
       if (!sheetName) { noSheet += entries.length; continue }
       const names = await readNameColumn(token, sheetName)
       const dates = weekDates(weekStart)
+      const roster = (await db.collection('oncall').doc(weekStart).get()).data() || null
       for (const { excelName, schedule } of entries) {
         const index = names.indexOf(normaliseName(excelName))
         if (index < 0) { noRow++; continue }
         const row = index + 1
-        const cells = normalizeSchedule(schedule.days).map((day, i) => excelCellText(day, holidayOn(dates[i])))
+        const cells = daysWithCalls(schedule.days, roster, schedule.uid).map((day, i) => excelCellText(day, holidayOn(dates[i])))
         await graphPatch(token, `${sheetPath(sheetName)}/range(address='D${row}:I${row}')`, { values: [[...cells, schedule.comments || '']] })
         written++
       }
@@ -156,7 +169,7 @@ async function main() {
   }
 
   await stateRef.set({ lastRun: runStart })
-  console.log(`Excel sync: ${changed.size} changed, ${written} rows written, ${noSheet} with no sheet for their week yet, ${noRow} not found in their sheet.`)
+  console.log(`Excel sync: ${changed.size} to copy (${changedRosters.size} roster changes), ${written} rows written, ${noSheet} with no sheet for their week yet, ${noRow} not found in their sheet.`)
 }
 
 main().catch(err => {

@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { toISO, weekStartOf, addDaysISO, fromISO, WEEK_DAYS, DAY_SHORT, MONTHS_LONG } from '../utils/week'
+import { useAuth } from '../contexts/AuthContext'
+import { toISO, weekStartOf, addDaysISO, fromISO, weekdaysInRange, WEEK_DAYS, DAY_SHORT, MONTHS_LONG } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, STATUS, INK } from '../utils/status'
 import { shortNames } from '../utils/names'
+import { writeLeaveRange } from '../utils/scheduleStore'
 import { useUsers, useSchedules } from '../hooks/useScheduleData'
+import LeaveDrawer from '../components/LeaveDrawer'
+import Toast, { useToast } from '../components/Toast'
 import { IconButton, Loading } from '../components/ui'
 
 const MAX_ITEMS = 4
@@ -26,15 +30,19 @@ function monthWeeks(year, month) {
 
 export default function LeaveCalendar() {
   const navigate = useNavigate()
+  const { user, profile } = useAuth()
+  const isAdmin = profile?.role === 'admin'
   const now = new Date()
   const [monthOff, setMonthOff] = useState(0)
+  const [booking, setBooking] = useState(null) // the day tapped, as YYYY-MM-DD
+  const [toast, showToast] = useToast()
   const shown = new Date(now.getFullYear(), now.getMonth() + monthOff, 1)
   const year = shown.getFullYear()
   const month = shown.getMonth()
   const weeks = monthWeeks(year, month)
 
   const { users, loading: usersLoading } = useUsers()
-  const { byWeek, loading: schedLoading } = useSchedules(weeks)
+  const { byWeek, loading: schedLoading, patch } = useSchedules(weeks)
   const names = useMemo(() => shortNames(users), [users])
   const sorted = useMemo(() => [...users].sort((a, b) => names.get(a.uid).localeCompare(names.get(b.uid))), [users, names])
   const today = toISO(now)
@@ -53,7 +61,31 @@ export default function LeaveCalendar() {
     return { iso, dow: i, holiday, items, inMonth: fromISO(iso).getMonth() === month }
   }))
   const agenda = days.filter(d => d.inMonth && (d.holiday || d.items.length))
-  const open = iso => navigate(`/day?date=${iso}`)
+
+  // Everyone can book their own leave; admins can book anyone's — the same
+  // rule the database enforces, so nobody is offered a save that will fail.
+  const bookable = isAdmin ? sorted : sorted.filter(u => u.uid === user?.uid)
+  const bookingDay = booking ? days.find(d => d.iso === booking) : null
+
+  /**
+   * Books the leave, then updates what's on screen without a reload. Weeks outside the month in
+   * view simply load fresh when they come into view.
+   */
+  async function bookLeave({ person, from, to, type }) {
+    const count = weekdaysInRange(from, to).filter(d => !holidayOn(d.iso)).length
+    try {
+      const written = await writeLeaveRange({ person, from, to, type, editorUid: user.uid })
+      for (const w of written) patch(w.weekStart, person.uid, w.saved)
+      setBooking(null)
+      showToast(`${type} booked for ${names.get(person.uid)} — ${count} ${count === 1 ? 'day' : 'days'}.`)
+    } catch (e) {
+      console.error(e)
+      showToast(e.code === 'permission-denied'
+        ? 'Not allowed — you can only book your own leave.'
+        : 'Could not book that leave — try again.')
+    }
+  }
+
   const loading = usersLoading || schedLoading
 
   return (
@@ -62,7 +94,9 @@ export default function LeaveCalendar() {
         <IconButton label="Previous month" onClick={() => setMonthOff(m => m - 1)}><ChevronLeft size={20} /></IconButton>
         <span className="month-label">{MONTHS_LONG[month]} {year}</span>
         <IconButton label="Next month" onClick={() => setMonthOff(m => m + 1)}><ChevronRight size={20} /></IconButton>
-        <span className="month-caption">Leave, training and public holidays. Weekdays only — tap a day to see who’s where.</span>
+        <span className="month-caption">
+          Leave, training and public holidays. Weekdays only — tap a day to book {isAdmin ? 'leave for anyone' : 'your leave'}.
+        </span>
       </div>
 
       {loading ? <Loading /> : (
@@ -75,7 +109,7 @@ export default function LeaveCalendar() {
                 type="button"
                 className={`month-cell${d.inMonth ? '' : ' outside'}`}
                 style={d.holiday ? { background: STATUS.holiday.bg, color: INK } : undefined}
-                onClick={() => open(d.iso)}
+                onClick={() => setBooking(d.iso)}
               >
                 <span className={`month-num${d.iso === today ? ' today' : ''}`}>{fromISO(d.iso).getDate()}</span>
                 {d.holiday && <span className="month-holiday">{d.holiday}</span>}
@@ -89,7 +123,7 @@ export default function LeaveCalendar() {
 
           <div className="month-agenda">
             {agenda.map(d => (
-              <button key={d.iso} type="button" className="agenda-row" style={d.holiday ? { background: STATUS.holiday.bg, color: INK } : undefined} onClick={() => open(d.iso)}>
+              <button key={d.iso} type="button" className="agenda-row" style={d.holiday ? { background: STATUS.holiday.bg, color: INK } : undefined} onClick={() => setBooking(d.iso)}>
                 <span className="agenda-date">
                   <span className="agenda-dow">{DAY_SHORT[d.dow]}</span>
                   <span className="agenda-num">{fromISO(d.iso).getDate()}</span>
@@ -104,6 +138,22 @@ export default function LeaveCalendar() {
           </div>
         </>
       )}
+
+      {booking && (
+        <LeaveDrawer
+          date={booking}
+          people={bookable}
+          names={names}
+          defaultUid={user?.uid}
+          canPickOthers={isAdmin}
+          booked={bookingDay?.items || []}
+          onSave={bookLeave}
+          onOpenDay={() => navigate(`/day?date=${booking}`)}
+          onClose={() => setBooking(null)}
+        />
+      )}
+
+      <Toast message={toast} />
     </div>
   )
 }

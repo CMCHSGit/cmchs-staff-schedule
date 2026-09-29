@@ -146,8 +146,16 @@ After deploying:
 /schedules/{weekStart_uid}
   uid, displayName, email, team, weekStart (YYYY-MM-DD)
   days: [ { location }, × 5 ]   — Mon through Fri (default varies by team)
-  comments                      — optional notes for the week
+  comments                      — optional notes for the week, edited from Team week's
+                                  Comments column or the box on My week
   submittedAt
+
+/oncall/{weekStart}             — one doc per week, id = that Monday
+  uid, displayName              — the engineer on call all week (null = unassigned)
+  calls: [ uid, × 5 ]           — who covers customer calls each weekday ('' = nobody).
+                                  Set on the On-call page, not by each person; days also
+                                  carry a legacy onCall flag from before the roster existed
+  updatedBy, updatedAt
 
 Teams: Admin, Management, Engineers, Sales, Application (chosen on first sign-in, stored on user profile)
 ```

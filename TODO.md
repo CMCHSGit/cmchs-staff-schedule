@@ -8,11 +8,15 @@ when items are ticked off; new items take the next unused number.
 ## v2 design (Staff-Schedule_v2) — integrated 2026-09-29
 
 New CHS look plus Team week, Day, Leave calendar and On-call views, admin tap-to-edit and
-"Copy last week".
+"Copy last week". Since then: Team week's Comments column is its own button, customer calls
+are rostered per day on the On-call page instead of being ticked by each person, and tapping
+a date in the Leave calendar books leave for a person over a date range.
 
 - [ ] **#1** **Publish the updated `firestore.rules`** in Firebase Console → Firestore → Rules.
-      Until then, admins can't save other people's entries or the on-call roster (the app
-      says so instead of failing silently). Everyone's own My week keeps working regardless.
+      Until then, admins can't save other people's entries, the on-call roster or the
+      customer-calls cover that now lives on it, and can't book leave for anyone else (the
+      app says so instead of failing silently). Everyone's own My week, their own comment
+      and their own leave booking keep working regardless.
 - [ ] **#2** Decide whether regional anniversary days (Wellington, Canterbury…) should show too —
       only national holidays + Auckland Anniversary are built in (`src/utils/holidays.js`).
 - [ ] **#3** Matariki dates are listed to 2032 — extend the table in `holidays.js` before then.
