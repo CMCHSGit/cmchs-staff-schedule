@@ -1,4 +1,4 @@
-import { toISO } from './week'
+import { toISO } from './week.js'
 
 /**
  * New Zealand public holidays, worked out in code so nobody has to maintain

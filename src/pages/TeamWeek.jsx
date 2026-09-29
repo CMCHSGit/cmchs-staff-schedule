@@ -7,7 +7,7 @@ import { describeDay, INK } from '../utils/status'
 import { groupByTeam, doesCustomerCalls } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { weekConflicts, onLeave } from '../utils/weekInsights'
-import { writeSchedule, syncToExcel, addNewLocations } from '../utils/scheduleStore'
+import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
 import { useUsers, useSchedules, useOnCall, useLocations } from '../hooks/useScheduleData'
 import WeekNav from '../components/WeekNav'
 import DayPills from '../components/DayPills'
@@ -66,7 +66,6 @@ export default function TeamWeek() {
       patch(weekStart, person.uid, saved)
       setEditing(null)
       showToast('Saved.')
-      syncToExcel(user, weekStart, [{ uid: person.uid, days, comments }])
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'
@@ -88,7 +87,6 @@ export default function TeamWeek() {
     if (!targets.length) return showToast('Everyone with last week filled in has started this week already.')
     if (!confirm(`Copy last week into this week for ${targets.length} ${targets.length === 1 ? 'person' : 'people'} who haven’t filled it in yet? Nothing already entered is changed.`)) return
     setCopying(true)
-    const synced = []
     try {
       for (const u of targets) {
         const days = normalizeSchedule(last[u.uid].days).map((d, i) => {
@@ -97,10 +95,8 @@ export default function TeamWeek() {
         })
         const saved = await writeSchedule({ person: u, weekStart, days, comments: '', editorUid: user.uid, existing: null, extra: { copiedFrom: prevWeek } })
         patch(weekStart, u.uid, saved)
-        synced.push({ uid: u.uid, days, comments: '' })
       }
       showToast(`Copied from week starting ${dayMonth(prevWeek)}. Leave and holidays were not carried over.`)
-      syncToExcel(user, weekStart, synced)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'

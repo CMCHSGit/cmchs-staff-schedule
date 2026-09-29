@@ -1,6 +1,6 @@
 # CMCHS Staff Schedule — Setup Guide
 
-A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
+A PWA for team weekly location scheduling. Built with React + Firebase, hosted entirely on GitHub (Pages + Actions).
 
 ---
 
@@ -8,7 +8,8 @@ A PWA for team weekly location scheduling. Built with React + Firebase + Vercel.
 - **Frontend**: React (Vite) — PWA, installable from browser
 - **Auth**: Firebase Auth with Microsoft (Entra ID / Azure AD) as the provider
 - **Database**: Firebase Firestore
-- **Hosting**: Vercel
+- **Hosting**: GitHub Pages, built and published by GitHub Actions on every push to `main`
+- **Background jobs**: GitHub Actions on a timer — Thursday reminder, Excel sync every 15 min
 - **Reminders**: push notification (Firebase Cloud Messaging) + email (Resend), sent every Thursday morning NZ time
 - **Excel sync**: one-way (app → Excel), mirrors saves into the existing company Excel schedule via Microsoft Graph
 
@@ -88,21 +89,30 @@ npm run dev
 
 ---
 
-## 6. Deploy to Vercel
+## 6. Deploy (GitHub Pages + Actions)
 
-1. Push to GitHub
-2. Import repo in [Vercel](https://vercel.com)
-3. Add all env vars from `.env.example` under **Settings → Environment Variables**
-   - The `VITE_*` vars go to **Production + Preview + Development**
-   - The server-only vars (`FIREBASE_*`, `RESEND_*`, `CRON_SECRET`, `AZURE_CLIENT_*`,
-     `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID`) go to **Production** only
-4. Deploy
+Everything runs from this GitHub repo — no other host.
 
-The cron job in `vercel.json` runs every Wednesday at 20:00 UTC (= Thursday 08:00 NZT — the
-day the schedule is due). It pushes a notification and sends an email to everyone who hasn't
-submitted their schedule for the coming week.
+1. **Settings → Secrets and variables → Actions → Secrets**: add every value from
+   `.env.example` except `CRON_SECRET` and `APP_URL` (not needed any more). The `VITE_*` ones
+   are used to build the site; the rest by the background jobs.
+2. **Settings → Pages → Source: "GitHub Actions"**, custom domain `schedule.chsnz.co.nz`,
+   Enforce HTTPS on. DNS: `schedule` is a CNAME to `cmchsgit.github.io`.
+3. Push to `main` (or Actions → Deploy site → Run workflow) — `.github/workflows/deploy.yml`
+   builds and publishes it.
 
-Push notifications need one opt-in per device: on **My schedule**, tap "🔔 Enable" (Android:
+Background jobs (`.github/workflows/`):
+- **remind.yml** — Wednesday 20:00 UTC (= Thursday 08:00 NZST, the day the schedule is due):
+  push + email to everyone who hasn't confirmed next week. Runs `scripts/remind.mjs`.
+- **excel-sync.yml** — every 15 minutes, copies schedules saved since the last run into the
+  Excel file (`scripts/sync-excel.mjs`). Off until the repo **variable**
+  `EXCEL_SYNC_ENABLED` is set to `true`.
+- GitHub's timer can run late at busy times, and pauses timed jobs after 60 days with no repo
+  activity — each job re-enables itself on every run to prevent that.
+- The repo is public, so **Action logs are public**: the scripts only ever print counts.
+  Both jobs can be run by hand from the Actions tab (Run workflow) to test.
+
+Push notifications need one opt-in per device: on **My week**, tap "Turn on" under "Get Thursday reminders" (Android:
 works straight from the browser; iOS: only works once the app has been added to the Home
 Screen, iOS 16.4+ — a banner walks people through that first). Email keeps going regardless, as
 a fallback for anyone who hasn't opted in yet or whose device token has expired.
@@ -155,7 +165,7 @@ The app will open full-screen without browser chrome, like a native app.
 
 ## Cron reminder timing
 
-Edit `vercel.json` to change when reminders fire. Uses UTC cron syntax.
+Edit `.github/workflows/remind.yml` to change when reminders fire. Uses UTC cron syntax.
 
 | NZT target | UTC cron |
 |---|---|

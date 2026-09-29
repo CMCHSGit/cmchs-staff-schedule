@@ -1,15 +1,14 @@
 import { doc, setDoc, deleteDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
-import { scheduleId, weekDates } from './week'
-import { holidayOn } from './holidays'
-import { excelCellText } from './status'
+import { scheduleId } from './week'
 
 /**
  * Saves one person's week. `editorUid` is whoever is signed in — when that's
  * not the person themselves (an admin filling in for someone), the schedule
  * is marked needsConfirm so they still get Thursday's reminder and a
  * "check this" note on My week, rather than it silently counting as done.
- * Their own next save clears it.
+ * Their own next save clears it. The Excel copy happens separately: a
+ * GitHub Action picks up anything saved since its last run (scripts/sync-excel.mjs).
  */
 export async function writeSchedule({ person, weekStart, days, comments, editorUid, existing, extra = {} }) {
   const own = person.uid === editorUid
@@ -30,32 +29,6 @@ export async function writeSchedule({ person, weekStart, days, comments, editorU
   // days is an array, so it's still replaced wholesale, not merged.
   await setDoc(doc(db, 'schedules', scheduleId(weekStart, person.uid)), data, { merge: true })
   return { ...data, submittedAt: new Date() }
-}
-
-/**
- * Best-effort mirror into the company's existing Excel schedule — never
- * awaited by callers, never shown as an error. `entries` is one
- * { uid, days, comments } per person; admins may send other people's.
- */
-export async function syncToExcel(user, weekStart, entries) {
-  try {
-    const dates = weekDates(weekStart)
-    const idToken = await user.getIdToken()
-    await fetch('/api/sync-excel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({
-        weekStart,
-        entries: entries.map(e => ({
-          uid: e.uid,
-          cells: e.days.map((d, i) => excelCellText(d, holidayOn(dates[i]))),
-          comments: (e.comments || '').trim(),
-        })),
-      }),
-    })
-  } catch (e) {
-    console.error('Excel sync failed:', e)
-  }
 }
 
 /**

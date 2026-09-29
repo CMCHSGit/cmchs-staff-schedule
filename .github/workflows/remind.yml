@@ -1,0 +1,38 @@
+# Thursday 8am NZST reminder (push + email) for anyone who hasn't filled in
+# next week. GitHub's timer can run a little late at busy times.
+# NB: this repo is public, so run logs are too — scripts/remind.mjs only
+# ever prints counts, never names or emails.
+name: Thursday reminder
+
+on:
+  schedule:
+    - cron: '0 20 * * 3' # Wed 20:00 UTC = Thu 08:00 NZST (09:00 during daylight saving)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --omit=dev
+      - run: node scripts/remind.mjs
+        env:
+          FIREBASE_PROJECT_ID:   ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          RESEND_API_KEY:        ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM:           ${{ secrets.RESEND_FROM }}
+          APP_URL:               https://schedule.chsnz.co.nz
+      # GitHub pauses timed workflows after 60 days without repo activity —
+      # re-enabling this one on every run keeps it alive.
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/remind.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

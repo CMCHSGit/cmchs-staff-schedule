@@ -1,25 +1,17 @@
 /**
- * api/remind.js — Vercel Serverless Function
+ * scripts/remind.mjs — run by .github/workflows/remind.yml every Thursday
+ * morning NZ time (the day next week's schedule is due).
  *
- * Triggered by Vercel Cron (see vercel.json).
- * Runs every Thursday at 08:00 NZ time (Wed 20:00 UTC) — the day the schedule is due.
- *
- * Logic:
  *  1. Fetch all users from Firestore
  *  2. Find the upcoming Monday (next week's start)
- *  3. Check who has NOT yet submitted a schedule for that week
+ *  3. Check who has NOT yet confirmed a schedule for that week
  *  4. Send a reminder to each via push (FCM) AND email (Resend) — push is the
  *     immediate phone alert, email is the fallback if push isn't set up on
  *     their device or a token has gone stale
  *
- * Required env vars (set in Vercel project settings):
- *   FIREBASE_PROJECT_ID
- *   FIREBASE_CLIENT_EMAIL
- *   FIREBASE_PRIVATE_KEY
- *   RESEND_API_KEY
- *   RESEND_FROM          e.g. "CMCHS Staff Schedule <noreply@yourcompany.com>"
- *   CRON_SECRET          a random secret to protect the endpoint
- *   APP_URL              e.g. "https://schedule.chsnz.co.nz"
+ * Env (GitHub Actions secrets): FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL,
+ * FIREBASE_PRIVATE_KEY, RESEND_API_KEY, RESEND_FROM, APP_URL.
+ * The repo is public and so are its Action logs — only ever log counts.
  */
 
 import { initializeApp, cert, getApps } from 'firebase-admin/app'
@@ -98,7 +90,7 @@ async function sendReminderEmail(to, name, weekStart) {
 
   if (!res.ok) {
     const err = await res.text()
-    throw new Error(`Resend error for ${to}: ${err}`)
+    throw new Error(`Resend error: ${err}`)
   }
 }
 
@@ -135,50 +127,40 @@ async function sendPushToUser(db, user, weekStart) {
   return { sent: response.successCount, failed: response.failureCount }
 }
 
-export default async function handler(req, res) {
-  // Protect the endpoint — Vercel passes the secret automatically for cron
-  const authHeader = req.headers['authorization']
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+async function main() {
+  const db        = getDB()
+  const weekStart = nextMonday()
 
-  try {
-    const db        = getDB()
-    const weekStart = nextMonday()
+  const usersSnap = await db.collection('users').get()
+  const users = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }))
 
-    // Load all users
-    const usersSnap = await db.collection('users').get()
-    const users = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() }))
+  const schedulesSnap = await db.collection('schedules')
+    .where('weekStart', '==', weekStart)
+    .get()
+  // A week an admin pre-filled (Copy last week, or a Team week edit) still
+  // needs the person to check it, so it doesn't count as submitted yet.
+  const submittedUids = new Set(schedulesSnap.docs.map(d => d.data()).filter(s => !s.needsConfirm).map(s => s.uid))
 
-    // Load submitted schedules for next week
-    const schedulesSnap = await db.collection('schedules')
-      .where('weekStart', '==', weekStart)
-      .get()
-    // A week an admin pre-filled (Copy last week, or a Team week edit) still
-    // needs the person to check it, so it doesn't count as submitted yet.
-    const submittedUids = new Set(schedulesSnap.docs.map(d => d.data()).filter(s => !s.needsConfirm).map(s => s.uid))
+  // Placeholder (not-signed-in) people have no email, so drop out here.
+  const pending = users.filter(u => u.email && !submittedUids.has(u.uid))
 
-    // Filter to users who haven't submitted
-    const pending = users.filter(u => u.email && !submittedUids.has(u.uid))
+  const emailResults = await Promise.allSettled(
+    pending.map(u => sendReminderEmail(u.email, u.displayName?.split(' ')[0], weekStart))
+  )
+  const pushResults = await Promise.allSettled(
+    pending.map(u => sendPushToUser(db, u, weekStart))
+  )
 
-    const emailResults = await Promise.allSettled(
-      pending.map(u => sendReminderEmail(u.email, u.displayName?.split(' ')[0], weekStart))
-    )
-    const pushResults = await Promise.allSettled(
-      pending.map(u => sendPushToUser(db, u, weekStart))
-    )
+  const sent   = emailResults.filter(r => r.status === 'fulfilled').length
+  const failed = emailResults.filter(r => r.status === 'rejected').length
+  const pushSent   = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.sent : 0), 0)
+  const pushFailed = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.failed : 1), 0)
 
-    const sent   = emailResults.filter(r => r.status === 'fulfilled').length
-    const failed = emailResults.filter(r => r.status === 'rejected').length
-
-    const pushSent   = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.sent : 0), 0)
-    const pushFailed = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.failed : 1), 0)
-
-    console.log(`Reminders for week ${weekStart}: email ${sent} sent/${failed} failed, push ${pushSent} sent/${pushFailed} failed`)
-    return res.status(200).json({ weekStart, sent, failed, pushSent, pushFailed, total: pending.length })
-
-  } catch (err) {
-    console.error('Reminder job failed:', err)
-    return res.status(500).json({ error: err.message })
-  }
+  console.log(`Reminders for week ${weekStart}: ${pending.length} due; email ${sent} sent/${failed} failed, push ${pushSent} sent/${pushFailed} failed`)
+  if (failed) process.exitCode = 1 // shows as a failed run in GitHub, without naming anyone
 }
+
+main().catch(err => {
+  console.error('Reminder job failed:', err.message)
+  process.exit(1)
+})

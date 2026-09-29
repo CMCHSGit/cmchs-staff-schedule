@@ -1,0 +1,44 @@
+# Copies schedules saved in the app into the company Excel file, every 15
+# minutes. Switched off until the repo variable EXCEL_SYNC_ENABLED is set to
+# "true" (Settings → Secrets and variables → Actions → Variables) — i.e. once
+# IT has granted the Microsoft permission (TODO #18).
+# NB: this repo is public, so run logs are too — the script prints counts only.
+name: Excel sync
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: excel-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: vars.EXCEL_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --omit=dev
+      - run: node scripts/sync-excel.mjs
+        env:
+          FIREBASE_PROJECT_ID:   ${{ secrets.FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY:  ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          AZURE_TENANT_ID:       ${{ secrets.VITE_AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          SHAREPOINT_SITE_ID:    ${{ secrets.SHAREPOINT_SITE_ID }}
+          EXCEL_ITEM_ID:         ${{ secrets.EXCEL_ITEM_ID }}
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/excel-sync.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

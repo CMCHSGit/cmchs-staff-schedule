@@ -8,7 +8,7 @@ import { holidayOn } from '../utils/holidays'
 import { describeDay } from '../utils/status'
 import { getTeamConfig, teamLabel, quickFillsForTeam, doesCustomerCalls } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
-import { writeSchedule, syncToExcel, addNewLocations } from '../utils/scheduleStore'
+import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
 import { useLocations, useOnCall } from '../hooks/useScheduleData'
 import WeekNav from '../components/WeekNav'
 import Toast, { useToast } from '../components/Toast'
@@ -126,7 +126,6 @@ export default function MySchedule() {
       const saved = await writeSchedule({ person, weekStart, days: schedule, comments, editorUid: user.uid, existing })
       setExisting(saved)
       showToast('Schedule saved.')
-      syncToExcel(user, weekStart, [{ uid: user.uid, days: schedule, comments }]) // fire-and-forget mirror
     } catch (e) {
       showToast('Save failed — try again.')
     } finally {

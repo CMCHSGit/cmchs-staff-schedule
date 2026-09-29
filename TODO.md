@@ -19,6 +19,16 @@ New CHS look plus Team week, Day, Leave calendar and On-call views, admin tap-to
 - [ ] **#4** Excel sync still writes text only, not the Excel fill colours — possible follow-up once
       the sync is live and proven.
 
+## Move off Vercel to GitHub only (started 2026-09-29)
+
+Code is done (`.github/workflows/`, `scripts/`); these are the setup steps.
+
+- [ ] **#25** Add the Actions secrets (Settings → Secrets and variables → Actions) — see README §6.
+- [ ] **#26** Pages → Source "GitHub Actions", then Actions → "Deploy site" → Run workflow; check it goes green.
+- [ ] **#27** Pages custom domain `schedule.chsnz.co.nz` + DNS CNAME → `cmchsgit.github.io`.
+- [ ] **#28** Test sign-in, saving, and a manual run of "Thursday reminder" on the new site.
+- [ ] **#29** Delete the Vercel project once the new site has worked for a few days.
+
 ## Smartly leave integration (parked — pick up later)
 
 Goal: when staff leave is approved in Smartly, it should automatically populate into
@@ -100,7 +110,7 @@ Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedul
       its SharePoint share link's `sourcedoc={...}` parameter) is more robust — survives the
       file being renamed/moved. `api/sync-excel.js`/`.env.example`/README updated to match;
       `EXCEL_FILE_PATH` no longer exists, superseded by this.
-- [ ] **#21** Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID` in Vercel env vars (values
+- [ ] **#21** Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID` in GitHub Actions secrets (values
       already in hand from the above — just needs typing into Vercel, and can happen before
       the admin-consent step below, since these three don't need it).
 - [ ] **#22** Set `excelName` for at least one real test user in Admin → Users.
