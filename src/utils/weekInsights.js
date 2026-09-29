@@ -7,16 +7,18 @@ const DAYS = [0, 1, 2, 3, 4]
 const hasCalls = day => !!day?.onCall || statusOf(day) === 'calls'
 
 /**
- * Everyone covering customer calls on each weekday: whoever the on-call
- * roster has down for it, plus anyone whose own entry still says so (weeks
- * filled in before the roster took calls over, and rows imported from Excel
- * reading "… / Customer Calls").
+ * Who covers customer calls each weekday — one person per day, as a
+ * one-element list (empty when nobody). Whoever the on-call roster has down
+ * for that day; failing that, whoever's own entry says "Customer Calls"
+ * (typed in Team week, or imported from Excel), so it still counts as that
+ * day's cover rather than showing as unassigned.
  */
 export function callsCoverUids({ users, schedules, oncall }) {
   const rostered = normalizeCalls(oncall?.calls)
   return DAYS.map(i => {
-    const own = users.filter(u => hasCalls(schedules[u.uid]?.days?.[i])).map(u => u.uid)
-    return rostered[i] && !own.includes(rostered[i]) ? [rostered[i], ...own] : own
+    if (rostered[i]) return [rostered[i]]
+    const own = users.find(u => hasCalls(schedules[u.uid]?.days?.[i]))
+    return own ? [own.uid] : []
   })
 }
 

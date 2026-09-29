@@ -33,7 +33,6 @@ export default function OnCall() {
     const schedules = byWeek[w] || {}
     const current = oncall[w]
     const issue = weekConflicts({ weekStart: w, users, schedules, oncall: current, names }).find(c => c.type === 'oncall')
-    const rostered = normalizeCalls(current?.calls)
     const cover = callsCoverUids({ users, schedules, oncall: current })
     return {
       week: w,
@@ -41,10 +40,9 @@ export default function OnCall() {
       current,
       name: current?.uid ? names.get(current.uid) || current.displayName : '',
       holidays: weekDates(w).map(holidayOn),
-      rostered,
-      // Anyone covering calls because their own entry says so rather than the
-      // roster — shown next to the picker so the two never quietly disagree.
-      extra: cover.map((uids, i) => uids.filter(uid => uid !== rostered[i]).map(uid => names.get(uid)).filter(Boolean)),
+      // The one person covering each day — picked here, or whoever typed
+      // "Customer Calls" into their own entry that day.
+      cover: cover.map(uids => uids[0] || ''),
       calls: callsCover({ weekStart: w, users, schedules, oncall: current, names }),
       status: issue ? issue.short : 'Covered',
       tone: issue ? 'critical' : 'green',
@@ -87,18 +85,19 @@ export default function OnCall() {
   const callsCell = (r, i) => {
     if (r.holidays[i]) return <span className="oc-call-holiday">{r.holidays[i]}</span>
     if (!isAdmin) return r.calls[i]
+    // Cover can come from someone's own entry, and they may not be an
+    // engineer — keep them in the list so the picker shows who it really is.
+    const coverer = r.cover[i] && !engineers.some(u => u.uid === r.cover[i]) ? users.find(u => u.uid === r.cover[i]) : null
     return (
-      <>
-        <select
-          value={r.rostered[i]}
-          onChange={e => assignCalls(r.week, i, e.target.value)}
-          aria-label={`Customer calls, ${WEEK_DAYS[i]} ${dayMonth(weekDates(r.week)[i])}`}
-        >
-          <option value="">Unassigned</option>
-          {engineers.map(u => <option key={u.uid} value={u.uid}>{names.get(u.uid)}</option>)}
-        </select>
-        {!!r.extra[i].length && <span className="oc-call-extra">also {r.extra[i].join(', ')}</span>}
-      </>
+      <select
+        value={r.cover[i]}
+        onChange={e => assignCalls(r.week, i, e.target.value)}
+        aria-label={`Customer calls, ${WEEK_DAYS[i]} ${dayMonth(weekDates(r.week)[i])}`}
+      >
+        <option value="">Unassigned</option>
+        {engineers.map(u => <option key={u.uid} value={u.uid}>{names.get(u.uid)}</option>)}
+        {coverer && <option value={coverer.uid}>{names.get(coverer.uid)}</option>}
+      </select>
     )
   }
 
