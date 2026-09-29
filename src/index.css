@@ -60,6 +60,24 @@
 .theme-toggle { margin-left: auto; }
 .theme-toggle + .header-admin { margin-left: 0; }
 
+/* Signed-in account: initials button + a small panel with Sign out. */
+.account-menu { position: relative; flex: 0 0 auto; }
+.account-button {
+  width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--chs-purple); color: #fff;
+  font: var(--weight-semibold) 13px/1 var(--font-body); letter-spacing: .02em;
+}
+.account-button:focus-visible { box-shadow: var(--focus-ring); }
+.account-panel {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 45; width: 260px;
+  display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 16px;
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-overlay);
+}
+.account-name { font: var(--type-body-strong); color: var(--text-strong); overflow-wrap: anywhere; }
+.account-detail { font: var(--type-body-sm); color: var(--text-muted); overflow-wrap: anywhere; }
+.account-panel .btn { margin-top: 10px; }
+
 html, body, #root { min-height: 100%; }
 body {
   font: var(--type-body);

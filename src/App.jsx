@@ -11,6 +11,7 @@ import OnCall        from './pages/OnCall'
 import Admin         from './pages/Admin'
 import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
+import AccountMenu    from './components/AccountMenu'
 import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
 import { useTheme } from './utils/theme'
 import { APP_VERSION } from './version'
@@ -103,6 +104,7 @@ function AppHeader() {
         <IconButton className="theme-toggle" label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
         </IconButton>
+        <AccountMenu />
         {profile?.role === 'admin' && (
           <NavLink to="/admin" className={({ isActive }) => `header-admin${isActive ? ' active' : ''}`} aria-label="Admin">
             <Settings size={20} aria-hidden="true" />
