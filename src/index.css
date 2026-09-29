@@ -57,8 +57,8 @@
 :root[data-theme="dark"] .toast { background: #e8e9ea; color: #1d1d1d; }
 /* The logo artwork has dark lettering — sit it on a white plate rather than recolour it. */
 :root[data-theme="dark"] .logo-plate img { background: #fff; border-radius: var(--radius-md); padding: 4px 6px; box-sizing: content-box; }
-.theme-toggle { margin-left: auto; }
-.theme-toggle + .header-admin { margin-left: 0; }
+/* Light/dark, account and Admin sit together at the right of the header. */
+.header-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
 /* Signed-in account: initials button + a small panel with Sign out. */
 .account-menu { position: relative; flex: 0 0 auto; }
@@ -250,7 +250,7 @@ textarea.input { resize: vertical; min-height: 76px; }
 .brand-divider { width: 1px; height: 28px; background: var(--border-hairline); }
 .app-title { font: var(--type-h4); color: var(--text-strong); white-space: nowrap; }
 .header-tabs { display: none; }
-.header-admin { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font: var(--weight-semibold) var(--size-body-sm)/1 var(--font-body); padding: 8px; border-radius: var(--radius-md); }
+.header-admin { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font: var(--weight-semibold) var(--size-body-sm)/1 var(--font-body); padding: 8px; border-radius: var(--radius-md); }
 .header-admin.active { color: var(--accent-fg); }
 .header-admin-label { display: none; }
 

@@ -101,6 +101,7 @@ function AppHeader() {
             </NavLink>
           ))}
         </nav>
+        <div className="header-actions">
         <IconButton className="theme-toggle" label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'} onClick={toggleTheme}>
           {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
         </IconButton>
@@ -111,6 +112,7 @@ function AppHeader() {
             <span className="header-admin-label">Admin</span>
           </NavLink>
         )}
+        </div>
       </div>
       <StripeRule thickness={4} />
     </header>
