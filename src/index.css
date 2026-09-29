@@ -618,14 +618,16 @@ button.wkm-main { cursor: pointer; }
 .admin-layout { display: flex; flex-direction: column; gap: 18px; }
 .admin-side, .admin-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .admin-side-title { font: var(--type-h4); color: var(--text-strong); }
+.admin-side-title + p { margin-top: -8px; }
+.admin-side p + .admin-side-title { margin-top: 12px; }
 .admin-people-head { display: none; }
-@media (max-width: 999.98px) { .admin-side-title { display: none; } }
 @media (min-width: 1000px) {
   .admin-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 32px; align-items: start; }
   .admin-side { position: sticky; top: 96px; }
   .admin-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
   .admin-list-grid .admin-item:last-child { border-bottom: 1px solid var(--border-subtle); }
-  .admin-people .admin-item { display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 150px; gap: 12px; }
+  .admin-people .admin-item { display: grid; grid-template-columns: minmax(0, 1fr) 170px 130px 80px; gap: 12px; }
+  .admin-people .admin-remove { justify-self: start; }
   .admin-people .admin-controls { display: contents; }
   .admin-people .admin-controls select, .admin-people .admin-controls .input { width: 100% !important; }
   .admin-people-head { display: grid; padding-top: 10px; padding-bottom: 10px; background: var(--surface-subtle); }

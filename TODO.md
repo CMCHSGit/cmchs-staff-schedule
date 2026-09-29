@@ -93,8 +93,8 @@ Full design + what was learned about the workbook's actual structure (one sheet 
 ~140 of them, inconsistent sheet-naming — matched by date instead — AM/PM rows, D–H = Mon–Fri,
 I = per-person Comments) is in `C:\Users\PeterLin\.claude\plans\atomic-baking-noodle.md`.
 
-Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedule.jsx`'s
-`saveSchedule()`, using each user's new `excelName` field (Admin → Users) to find their row.
+Code is in `scripts/sync-excel.mjs`, run every 15 minutes by `.github/workflows/excel-sync.yml`.
+Rows are matched by the name the app shows (first name, or full name where two share one).
 
 - [x] **#15** Inspect the actual workbook structure (sheets, columns, merged cells, comments column).
 - [x] **#16** Design + build the sync function, the `excelName` admin field, and the save-time trigger.
@@ -120,9 +120,10 @@ Code is in: `api/sync-excel.js` (new), triggered fire-and-forget from `MySchedul
 - [ ] **#21** Set `AZURE_CLIENT_ID`, `SHAREPOINT_SITE_ID`, `EXCEL_ITEM_ID` in GitHub Actions secrets (values
       already in hand from the above — just needs typing into Vercel, and can happen before
       the admin-consent step below, since these three don't need it).
-- [ ] **#22** Set `excelName` for at least one real test user in Admin → Users.
+- [x] **#22** ~~Set `excelName` for a test user~~ — no longer needed (2026-09-29): rows now match
+      by the name the app shows, and the Excel name field was removed from Admin.
 - [ ] **#23** End-to-end test: save that user's schedule for the *current* week and confirm the Excel
       file actually updates; also test a week with no existing sheet yet (should skip
-      cleanly, not error) and a user with no `excelName` set (should also skip cleanly).
+      cleanly, not error) and someone whose name isn't in the sheet (should also skip cleanly).
 - [ ] **#24** Not yet built, deliberately deferred: auto-creating a new week's sheet when one doesn't
       exist yet (currently just skips) — a v2 once the read/write path is proven solid.

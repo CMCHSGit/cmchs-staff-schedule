@@ -5,7 +5,10 @@
  * whose on-call roster changed, since customer-calls cover lives there and
  * shows in the Excel cells — via Microsoft Graph — one-way, app →
  * Excel; see TODO.md for why. Never the source of truth: a week with no sheet
- * yet, or a person with no excelName, is simply skipped.
+ * yet, or a person whose name isn't in that week's sheet, is simply skipped.
+ * People are matched by the same short name the app shows (first name, or
+ * full name where two share one) — which is how the Excel's Name column
+ * is written too. An admin-set `excelName` on the user doc still wins.
  *
  * Where it got to is kept in Firestore (meta/excelSync.lastRun), so a failed
  * or skipped run just catches up next time.
@@ -22,6 +25,7 @@ import { getFirestore, Timestamp }      from 'firebase-admin/firestore'
 import { excelCellText }                from '../src/utils/status.js'
 import { holidayOn }                    from '../src/utils/holidays.js'
 import { weekDates, daysWithCalls } from '../src/utils/week.js'
+import { shortNames }                   from '../src/utils/names.js'
 
 const GRAPH = 'https://graph.microsoft.com/v1.0'
 const DRIVE_ROOT = `${GRAPH}/sites/${process.env.SHAREPOINT_SITE_ID}/drive/items/${process.env.EXCEL_ITEM_ID}`
@@ -139,10 +143,11 @@ async function main() {
     return
   }
 
-  const users = new Map((await db.collection('users').get()).docs.map(d => [d.id, d.data()]))
+  const userList = (await db.collection('users').get()).docs.map(d => ({ uid: d.id, ...d.data() }))
+  const rowNames = shortNames(userList) // excelName when set, else first/full name
   const byWeek = new Map()
   for (const s of changed.values()) {
-    const excelName = users.get(s.uid)?.excelName
+    const excelName = rowNames.get(s.uid)
     if (!excelName) continue
     if (!byWeek.has(s.weekStart)) byWeek.set(s.weekStart, [])
     byWeek.get(s.weekStart).push({ excelName, schedule: s })

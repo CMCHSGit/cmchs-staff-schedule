@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  collection, getDocs, getDoc, addDoc, deleteDoc, doc, setDoc, updateDoc,
+  collection, getDocs, addDoc, deleteDoc, doc, setDoc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
@@ -143,9 +143,8 @@ function UsersTab() {
   const [users,      setUsers]      = useState([])
   const [loading,    setLoading]    = useState(true)
   const [toast,      setToast]      = useState(null)
-  const [rosterText, setRosterText] = useState('')
-  const [showImport, setShowImport] = useState(false)
-  const [importing,  setImporting]  = useState(false)
+  const [newName,    setNewName]    = useState('')
+  const [newTeam,    setNewTeam]    = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -161,91 +160,38 @@ function UsersTab() {
   }
 
   /**
-   * Creates placeholder records for staff who haven't signed in yet, from a
-   * pasted "Name, Team" list (one per line) — deliberately not hardcoded
-   * anywhere in this file, since that would put a real staff roster into
-   * this repo's (public) git history. AuthContext.jsx auto-claims one of
-   * these by first name the first time that person actually signs in, only
-   * when the match is unambiguous — see its comment for why.
+   * Adds someone who hasn't signed in yet, so they can be scheduled (and
+   * show up in Team week) straight away. It's a placeholder: the first time
+   * they sign in, AuthContext.jsx adopts it — matching their email against
+   * first.last@ guessed from the full name, else an unambiguous first name —
+   * and carries over their team and any weeks already filled in for them.
    */
-  async function importFromExcel() {
-    const lines = rosterText.split('\n').map(l => l.trim()).filter(Boolean)
-    const existingIds = new Set(users.map(u => u.uid))
-    const realFirstNames = new Set(
-      users.filter(u => !u.pending).map(u => (u.displayName || '').split(' ')[0].toLowerCase())
-    )
-    let created = 0, skipped = 0, invalid = 0
-    for (const line of lines) {
-      const [namePart, teamPart] = line.split(',').map(s => s?.trim())
-      const team = TEAMS.find(t => t.toLowerCase() === (teamPart || '').toLowerCase())
-      if (!namePart || !team) { invalid++; continue }
-      const id = 'pending-' + namePart.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '')
-      const firstName = namePart.split(' ')[0].toLowerCase()
-      if (existingIds.has(id) || realFirstNames.has(firstName)) { skipped++; continue }
-      await setDoc(doc(db, 'users', id), {
-        displayName: namePart,
-        team,
-        role:        'user',
-        excelName:   namePart,
-        pending:     true,
-        createdAt:   serverTimestamp(),
-      })
-      created++
+  async function addPerson() {
+    const name = newName.trim().replace(/\s+/g, ' ')
+    if (!name) return
+    if (!newTeam) return showToast('Pick a team for them too.')
+    if (users.some(u => (u.displayName || '').trim().toLowerCase() === name.toLowerCase())) {
+      return showToast(`${name} is already on the list.`)
     }
-    showToast(`Imported ${created} new, skipped ${skipped} existing, ${invalid} invalid lines`)
-    setRosterText('')
-    setShowImport(false)
-    load()
+    const id = 'pending-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '')
+    const person = { displayName: name, team: newTeam, role: 'user', pending: true, createdAt: serverTimestamp() }
+    try {
+      await setDoc(doc(db, 'users', id), person)
+      setUsers(prev => [...prev, { uid: id, ...person }])
+      setNewName('')
+      showToast(`Added ${name}.`)
+    } catch (e) {
+      console.error(e)
+      showToast('Could not add them — try again.')
+    }
   }
 
-  /** Prefers an exact excelName match, falling back to first-name only when unambiguous. */
-  function findUserId(name) {
-    const target = name.trim().toLowerCase()
-    const exact = users.find(u => (u.excelName || '').trim().toLowerCase() === target)
-    if (exact) return exact.uid
-    const firstName = target.split(/\s+/)[0]
-    const candidates = users.filter(u => (u.displayName || '').trim().split(/\s+/)[0]?.toLowerCase() === firstName)
-    return candidates.length === 1 ? candidates[0].uid : null
-  }
-
-  /**
-   * Backfills past weeks from a { weekStart: [{name, team, days, comments}] }
-   * JSON file (pulled from the Excel schedule) — a file upload rather than
-   * pasted/hardcoded, since this is real staff schedule data. Never
-   * overwrites a schedule that's already there (e.g. from someone actually
-   * using the app), only fills in ones that don't exist yet.
-   */
-  async function importScheduleHistory(file) {
-    const text = await file.text()
-    let data
-    try { data = JSON.parse(text) } catch { showToast('Could not parse that file as JSON'); return }
-
-    setImporting(true)
-    let created = 0, skippedExisting = 0, unmatched = 0
-    for (const [weekStart, entries] of Object.entries(data)) {
-      for (const entry of entries) {
-        const uid = findUserId(entry.name)
-        if (!uid) { unmatched++; continue }
-        const scheduleRef = doc(db, 'schedules', `${weekStart}_${uid}`)
-        const existing = await getDoc(scheduleRef)
-        if (existing.exists()) { skippedExisting++; continue }
-        const user = users.find(u => u.uid === uid)
-        await setDoc(scheduleRef, {
-          uid,
-          displayName: user?.displayName || entry.name,
-          email:       user?.email || null,
-          team:        user?.team || entry.team || null,
-          weekStart,
-          days:        entry.days.map(location => ({ location: location || '', onCall: false })),
-          comments:    entry.comments || '',
-          submittedAt: serverTimestamp(),
-          importedFromExcel: true,
-        })
-        created++
-      }
-    }
-    setImporting(false)
-    showToast(`Imported ${created} schedules, skipped ${skippedExisting} existing, ${unmatched} unmatched names`)
+  /** Only for people who haven't signed in yet — e.g. a typo when adding them. */
+  async function removePerson(u) {
+    if (!confirm(`Remove ${u.displayName}? They haven't signed in yet, so this only removes the placeholder.`)) return
+    await deleteDoc(doc(db, 'users', u.uid))
+    setUsers(prev => prev.filter(x => x.uid !== u.uid))
+    showToast(`Removed ${u.displayName}.`)
   }
 
   function showToast(msg) {
@@ -262,52 +208,25 @@ function UsersTab() {
         Admins can update anyone’s schedule from Team week and run the on-call roster.
       </p>
 
-      <div>
-        <Button variant="secondary" size="sm" onClick={() => setShowImport(v => !v)}>
-          {showImport ? 'Cancel import' : 'Import staff from Excel'}
-        </Button>
-        {showImport && (
-          <div className="field" style={{ marginTop: 10 }}>
-            <p className="text-sm text-muted">
-              Paste one person per line, as <code>Name, Team</code> — e.g. <code>Karen, Admin</code>
-              or <code>Mark Henderwood, Application</code> for someone who shares a first name
-              with someone else on the list. Adds a placeholder for anyone who hasn’t signed in
-              yet (safe to run more than once — already-imported or already-real people are
-              skipped). When someone first signs in for real, this app automatically finds and
-              adopts their matching placeholder’s team — by email guess (first.last@) when a
-              full name was pasted, otherwise by first name, and only when that’s unambiguous.
-              A first-name-only entry that turns out to collide with someone else is left for
-              you to sort out by hand rather than guessed at.
-            </p>
-            <textarea
-              className="input"
-              rows={8}
-              style={{ fontFamily: 'var(--font-mono)' }}
-              placeholder={'Karen, Admin\nJan, Admin\nMark, Management\n...'}
-              value={rosterText}
-              onChange={e => setRosterText(e.target.value)}
-            />
-            <div><Button size="sm" onClick={importFromExcel}>Import</Button></div>
-          </div>
-        )}
-      </div>
-
-      <div className="field">
-        <label className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>
-          {importing ? 'Importing…' : 'Import schedule history (.json)'}
-          <input
-            type="file"
-            accept="application/json"
-            disabled={importing}
-            style={{ display: 'none' }}
-            onChange={e => { if (e.target.files[0]) importScheduleHistory(e.target.files[0]); e.target.value = '' }}
-          />
-        </label>
-        <p className="text-sm text-muted">
-          Backfills past weeks from an exported Excel schedule file. Matches each entry to an
-          existing person (by Excel name, or first name if unambiguous) and only fills in weeks
-          that don’t already have a saved schedule — never overwrites one that’s already there.
-        </p>
+      <h2 className="admin-side-title">Add a person</h2>
+      <p className="text-sm text-muted">
+        For someone who hasn’t signed in yet, so they can be scheduled now. Use their full name —
+        it links to their account automatically when they first sign in.
+      </p>
+      <input
+        className="input"
+        placeholder="Full name…"
+        value={newName}
+        onChange={e => setNewName(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && addPerson()}
+        aria-label="New person's full name"
+      />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select value={newTeam} onChange={e => setNewTeam(e.target.value)} aria-label="New person's team" style={{ flex: 1 }}>
+          <option value="">Team…</option>
+          {TEAMS.map(t => <option key={t} value={t}>{teamLabel(t)}</option>)}
+        </select>
+        <Button onClick={addPerson}>Add</Button>
       </div>
 
       </div>
@@ -316,7 +235,7 @@ function UsersTab() {
       {loading ? <Loading /> : (
         <div className="card admin-list admin-people">
           <div className="admin-item admin-people-head" aria-hidden="true">
-            <span>Name</span><span>Team</span><span>Role</span><span>Excel name</span>
+            <span>Name</span><span>Team</span><span>Role</span>
           </div>
           {users.map(u => (
             <div key={u.uid} className="admin-item">
@@ -350,21 +269,9 @@ function UsersTab() {
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
                 </select>
-                <input
-                  className="input"
-                  defaultValue={u.excelName || ''}
-                  placeholder="Excel name"
-                  aria-label="Excel name"
-                  title="Name as it appears in the Excel schedule's Name column — also the name the schedule shows. Leave blank to skip syncing them."
-                  onBlur={e => {
-                    const val = e.target.value.trim()
-                    if (val !== (u.excelName || '')) {
-                      updateUser(u.uid, 'excelName', val || null)
-                      showToast('Saved.')
-                    }
-                  }}
-                  style={{ width: 130 }}
-                />
+                {u.pending && (
+                  <Button variant="ghost" size="sm" className="admin-remove" style={{ color: 'var(--status-critical)' }} onClick={() => removePerson(u)}>Remove</Button>
+                )}
               </div>
             </div>
           ))}

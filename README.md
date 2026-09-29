@@ -74,8 +74,9 @@ doesn't exist for your deployment.
 4. Set `EXCEL_ITEM_ID` to the file's own item ID — open it in SharePoint, copy its share link,
    and pull the value out of the `sourcedoc={...}` parameter (strip the curly braces). More
    reliable than a folder path, since it still works even if the file gets renamed or moved.
-5. In the app, **Admin → Users**, set each person's **Excel name** — the first name exactly as
-   it appears in that sheet's Name column. Anyone left blank is simply skipped (not an error)
+5. Nothing to set per person: rows are matched by the name the app shows (first name, or full
+   name where two people share one), which is how the sheet's Name column is written. Anyone
+   whose name isn't in that week's sheet is simply skipped (not an error)
 
 ---
 
@@ -137,8 +138,10 @@ After deploying:
 /users/{uid}
   displayName, email, team, role (user|admin), createdAt
   fcmTokens: [ ... ]           — optional, one per device with push enabled
-  excelName                    — optional, first name as it appears in the Excel schedule;
-                                  unset means this person is skipped by Excel sync
+  excelName                    — optional override for the name shown and matched in Excel;
+                                  no longer editable in Admin (older records may still have it)
+  pending: true                — added by an admin (Admin → People → Add a person) before they
+                                  signed in; adopted automatically on their first sign-in
 
 /locations/{id}
   name, order, active, createdAt
