@@ -139,7 +139,7 @@ export default function MySchedule() {
   const savedAt = existing?.submittedAt
 
   return (
-    <div className="page page-narrow">
+    <div className="page myweek">
       <div className="page-head">
         <div className="page-head-text">
           <h1 className="page-title">My week</h1>
@@ -155,13 +155,22 @@ export default function MySchedule() {
         <Badge tone={isComplete ? 'green' : 'orange'}>{isComplete ? 'Complete' : 'Incomplete'}</Badge>
       </div>
 
-      <WeekNav
-        weekStart={weekStart}
-        isThisWeek={weekOffset === 0}
-        onPrev={() => setWeekOffset(w => w - 1)}
-        onNext={() => setWeekOffset(w => w + 1)}
-        onThisWeek={() => setWeekOffset(0)}
-      />
+      {/* Week picker and "fill every day" — stacked on a phone, one row on desktop. */}
+      <div className="myweek-toolbar">
+        <WeekNav
+          weekStart={weekStart}
+          isThisWeek={weekOffset === 0}
+          onPrev={() => setWeekOffset(w => w - 1)}
+          onNext={() => setWeekOffset(w => w + 1)}
+          onThisWeek={() => setWeekOffset(0)}
+        />
+        <div className="quick-picks">
+          <span className="text-sm text-muted">Fill every day:</span>
+          {quickFillsForTeam(team).map(loc => (
+            <Tag key={loc} onClick={() => fillAllDays(loc)}>{loc}</Tag>
+          ))}
+        </div>
+      </div>
 
       {nextWeekDue && (
         <Alert
@@ -201,13 +210,6 @@ export default function MySchedule() {
         </Alert>
       )}
 
-      <div className="quick-picks">
-        <span className="text-sm text-muted">Fill every day:</span>
-        {quickFillsForTeam(team).map(loc => (
-          <Tag key={loc} onClick={() => fillAllDays(loc)}>{loc}</Tag>
-        ))}
-      </div>
-
       {loading ? <Loading /> : (
         <div className="day-cards">
           {WEEK_DAYS.map((day, i) => {
@@ -239,6 +241,8 @@ export default function MySchedule() {
         </div>
       )}
 
+      {/* Comments and Save — one after the other on a phone, side by side on desktop. */}
+      <div className="myweek-footer">
       <div className="field">
         <label className="field-label" htmlFor="week-comments">Comments</label>
         <span className="text-sm text-muted">e.g. back from leave on the 5th, client visits, anything the team should know.</span>
@@ -255,6 +259,7 @@ export default function MySchedule() {
       <Button size="lg" block onClick={saveSchedule} disabled={saving || loading}>
         {saving ? <Spinner size={20} light /> : 'Save schedule'}
       </Button>
+      </div>
 
       <Toast message={toast} />
     </div>

@@ -383,6 +383,20 @@ textarea.input { resize: vertical; min-height: 76px; }
   background: #FF7C80; color: var(--ink); font: var(--type-body-strong);
 }
 
+/* My week on desktop: the five days side by side like the Team week grid,
+   week picker + "fill every day" on one row, comments beside Save. Below
+   1000px it stays the single phone column. */
+.myweek { max-width: 640px; }
+.myweek-toolbar, .myweek-footer { display: flex; flex-direction: column; gap: 18px; }
+@media (min-width: 1000px) {
+  .myweek { max-width: 1440px; }
+  .myweek-toolbar { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .myweek-toolbar .quick-picks { justify-content: flex-end; }
+  .myweek .day-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+  .myweek .day-card-head { flex-wrap: wrap; }
+  .myweek-footer { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: end; }
+}
+
 /* ════════════════════════════════════════════════════════════════════
    Team week — Excel-style grid (desktop) / one day per person (phone)
    ════════════════════════════════════════════════════════════════════ */
@@ -573,6 +587,25 @@ button.wkm-main { cursor: pointer; }
 }
 @media (min-width: 760px) { .version-tag { bottom: 8px; right: 12px; } }
 @media print { .version-tag { display: none; } }
+/* Admin on desktop: a side panel (intro, add form, imports) beside the
+   list — locations in columns, people as a table. Phones keep one column. */
+.admin-page { max-width: 1440px; }
+.admin-layout { display: flex; flex-direction: column; gap: 18px; }
+.admin-side, .admin-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.admin-side-title { font: var(--type-h4); color: var(--text-strong); }
+.admin-people-head { display: none; }
+@media (max-width: 999.98px) { .admin-side-title { display: none; } }
+@media (min-width: 1000px) {
+  .admin-layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .admin-side { position: sticky; top: 96px; }
+  .admin-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .admin-list-grid .admin-item:last-child { border-bottom: 1px solid var(--border-subtle); }
+  .admin-people .admin-item { display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 150px; gap: 12px; }
+  .admin-people .admin-controls { display: contents; }
+  .admin-people .admin-controls select, .admin-people .admin-controls .input { width: 100% !important; }
+  .admin-people-head { display: grid; padding-top: 10px; padding-bottom: 10px; background: var(--surface-subtle); }
+  .admin-people-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
+}
 .version-note { text-align: center; font: var(--type-caption); color: var(--text-muted); padding: 8px 0 16px; }
 code { font-family: var(--font-mono); font-size: .92em; }
 

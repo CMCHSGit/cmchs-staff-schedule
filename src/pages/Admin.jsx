@@ -24,7 +24,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="page page-narrow">
+    <div className="page admin-page">
       <h1 className="page-title">Admin</h1>
 
       <div className="tabs" role="tablist">
@@ -92,7 +92,9 @@ function LocationsTab() {
   }
 
   return (
-    <div className="page-head-text" style={{ gap: 14 }}>
+    <div className="admin-layout">
+      <div className="admin-side">
+      <h2 className="admin-side-title">Add a location</h2>
       <p className="text-sm text-muted">
         The suggestions people see when filling in their schedule. Anything typed that isn’t
         here gets added automatically. Hiding a location won’t change schedules already saved.
@@ -109,9 +111,11 @@ function LocationsTab() {
         />
         <Button onClick={addLocation}>Add</Button>
       </div>
+      </div>
 
+      <div className="admin-main">
       {loading ? <Loading /> : (
-        <div className="card admin-list">
+        <div className="card admin-list admin-list-grid">
           {locations.length === 0 && <p className="text-sm text-muted" style={{ padding: 16 }}>No locations yet.</p>}
           {locations.map(loc => (
             <div key={loc.id} className="admin-item" style={{ opacity: loc.active ? 1 : 0.5 }}>
@@ -127,6 +131,7 @@ function LocationsTab() {
           ))}
         </div>
       )}
+      </div>
 
       <Toast message={toast} />
     </div>
@@ -249,7 +254,9 @@ function UsersTab() {
   }
 
   return (
-    <div className="page-head-text" style={{ gap: 14 }}>
+    <div className="admin-layout">
+      <div className="admin-side">
+      <h2 className="admin-side-title">People</h2>
       <p className="text-sm text-muted">
         Assign teams and roles. Most people pick their team on first sign-in; change it here if needed.
         Admins can update anyone’s schedule from Team week and run the on-call roster.
@@ -303,8 +310,14 @@ function UsersTab() {
         </p>
       </div>
 
+      </div>
+
+      <div className="admin-main">
       {loading ? <Loading /> : (
-        <div className="card admin-list">
+        <div className="card admin-list admin-people">
+          <div className="admin-item admin-people-head" aria-hidden="true">
+            <span>Name</span><span>Team</span><span>Role</span><span>Excel name</span>
+          </div>
           {users.map(u => (
             <div key={u.uid} className="admin-item">
               <div style={{ flex: 1, minWidth: 180 }}>
@@ -357,6 +370,7 @@ function UsersTab() {
           ))}
         </div>
       )}
+      </div>
 
       <Toast message={toast} />
     </div>
