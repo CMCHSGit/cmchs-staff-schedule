@@ -6,9 +6,12 @@ import { toISO, weekStartOf, addDaysISO, fromISO, weekdaysInRange, WEEK_DAYS, DA
 import { holidayOn } from '../utils/holidays'
 import { describeDay, STATUS, INK } from '../utils/status'
 import { shortNames } from '../utils/names'
+import { groupByTeam } from '../utils/teams'
 import { writeLeaveRange } from '../utils/scheduleStore'
 import { useUsers, useSchedules } from '../hooks/useScheduleData'
 import LeaveDrawer from '../components/LeaveDrawer'
+import PeopleFilter, { filterPeople } from '../components/PeopleFilter'
+import Legend from '../components/Legend'
 import Toast, { useToast } from '../components/Toast'
 import { IconButton, Loading } from '../components/ui'
 
@@ -35,6 +38,8 @@ export default function LeaveCalendar() {
   const now = new Date()
   const [monthOff, setMonthOff] = useState(0)
   const [booking, setBooking] = useState(null) // the day tapped, as YYYY-MM-DD
+  const [query, setQuery] = useState('')
+  const [teamSel, setTeamSel] = useState([])
   const [toast, showToast] = useToast()
   const shown = new Date(now.getFullYear(), now.getMonth() + monthOff, 1)
   const year = shown.getFullYear()
@@ -46,13 +51,17 @@ export default function LeaveCalendar() {
   const names = useMemo(() => shortNames(users), [users])
   const sorted = useMemo(() => [...users].sort((a, b) => names.get(a.uid).localeCompare(names.get(b.uid))), [users, names])
   const today = toISO(now)
+  // The search and team tags narrow who shows on the calendar — booking
+  // still offers everyone you're allowed to book for.
+  const shownPeople = filterPeople(sorted, names, query, teamSel)
+  const filtering = !!query.trim() || teamSel.length > 0
 
   const days = weeks.flatMap(w => [0, 1, 2, 3, 4].map(i => {
     const iso = addDaysISO(w, i)
     const holiday = holidayOn(iso)
     const items = []
     if (!holiday) {
-      for (const u of sorted) {
+      for (const u of shownPeople) {
         const d = describeDay(byWeek[w]?.[u.uid]?.days?.[i])
         if (d.status === 'leave') items.push({ uid: u.uid, name: names.get(u.uid), bg: STATUS.leave.bg })
         else if (d.status === 'training') items.push({ uid: u.uid, name: `${names.get(u.uid)} · Training`, bg: STATUS.training.bg })
@@ -90,6 +99,9 @@ export default function LeaveCalendar() {
 
   return (
     <div className="page">
+      <PeopleFilter query={query} onQuery={setQuery} teams={groupByTeam(sorted)} selected={teamSel} onChange={setTeamSel} />
+      <div className="hide-narrow"><Legend /></div>
+
       <div className="month-nav">
         <IconButton label="Previous month" onClick={() => setMonthOff(m => m - 1)}><ChevronLeft size={20} /></IconButton>
         <span className="month-label">{MONTHS_LONG[month]} {year}</span>
@@ -134,7 +146,7 @@ export default function LeaveCalendar() {
                 </span>
               </button>
             ))}
-            {!agenda.length && <p className="empty-note" style={{ padding: 14 }}>No leave booked this month.</p>}
+            {!agenda.length && <p className="empty-note" style={{ padding: 14 }}>{filtering ? 'No leave matching that search this month.' : 'No leave booked this month.'}</p>}
           </div>
         </>
       )}
