@@ -10,7 +10,8 @@ when items are ticked off; new items take the next unused number.
 New CHS look plus Team week, Day, Leave calendar and On-call views, admin tap-to-edit and
 "Copy last week". Since then: Team week's Comments column is its own button, customer calls
 are rostered per day on the On-call page instead of being ticked by each person, and tapping
-a date in the Leave calendar books leave for a person over a date range.
+a date in the Leave calendar books leave for a person over a date range. Tapping a day in
+Team week now opens that person's whole week, not just the day tapped.
 
 - [x] **#1** **Publish the updated `firestore.rules`** (done 2026-09-29) in Firebase Console → Firestore → Rules.
       Until then, admins can't save other people's entries, the on-call roster or the

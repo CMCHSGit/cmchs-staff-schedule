@@ -86,7 +86,7 @@ export default function TeamWeek() {
   async function saveEdit(person, days, typed) {
     const comments = commentOf(person)
     try {
-      const fresh = await addNewLocations([typed], locations)
+      const fresh = await addNewLocations(typed, locations)
       if (fresh.length) setLocations(prev => [...prev, ...fresh])
       const saved = await writeSchedule({ person, weekStart, days, comments, editorUid: user.uid, existing: schedules[person.uid] })
       patch(weekStart, person.uid, saved)
@@ -319,7 +319,7 @@ export default function TeamWeek() {
           dayIdx={editing.dayIdx}
           schedule={schedules[editPerson.uid]}
           locations={locations}
-          calls={!!weekOf.get(editPerson.uid)?.[editing.dayIdx]?.onCall}
+          calls={weekOf.get(editPerson.uid)?.map(d => d.onCall) || []}
           onSave={(days, typed) => saveEdit(editPerson, days, typed)}
           onClose={() => setEditing(null)}
         />

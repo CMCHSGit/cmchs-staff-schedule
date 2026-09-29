@@ -611,6 +611,13 @@ button.wkm-main { cursor: pointer; }
 .drawer-name { font: var(--type-h3); color: var(--text-strong); }
 .drawer-section { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .drawer-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+.drawer-days { display: flex; flex-direction: column; gap: 10px; }
+.drawer-day { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.drawer-day.tapped { border-color: var(--accent-fg); box-shadow: var(--focus-ring); }
+.drawer-day-head { display: flex; align-items: baseline; gap: 8px; }
+.drawer-day-name { font: var(--type-body-strong); color: var(--text-strong); }
+.drawer-day-date { font: var(--type-caption); color: var(--text-muted); }
+.drawer-day-head .badge { margin-left: auto; }
 .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .drawer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .field-static { font: var(--type-body); color: var(--text-strong); }
