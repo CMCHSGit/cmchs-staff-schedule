@@ -563,6 +563,16 @@ button.wkm-main { cursor: pointer; }
 .admin-item-name { font: var(--weight-semibold) 15px/1.35 var(--font-body); color: var(--text-strong); display: flex; align-items: center; gap: 6px; }
 .admin-controls { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .admin-controls select, .admin-controls .input { width: auto; padding-top: 7px; padding-bottom: 7px; }
+.version-tag {
+  position: fixed; right: 8px; z-index: 35;
+  bottom: calc(var(--nav-h) + 6px + env(safe-area-inset-bottom)); /* just above the phone tab bar */
+  padding: 1px 6px; border-radius: var(--radius-sm);
+  background: var(--surface-page); color: var(--text-muted);
+  font: var(--weight-regular) 11px/1.5 var(--font-body);
+  opacity: .85; pointer-events: none;
+}
+@media (min-width: 760px) { .version-tag { bottom: 8px; right: 12px; } }
+@media print { .version-tag { display: none; } }
 .version-note { text-align: center; font: var(--type-caption); color: var(--text-muted); padding: 8px 0 16px; }
 code { font-family: var(--font-mono); font-size: .92em; }
 

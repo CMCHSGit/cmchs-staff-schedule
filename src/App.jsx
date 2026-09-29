@@ -13,6 +13,7 @@ import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
 import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
 import { useTheme } from './utils/theme'
+import { APP_VERSION } from './version'
 
 // Short labels for the phone's bottom bar, fuller ones for desktop tabs.
 const VIEWS = [
@@ -73,6 +74,9 @@ function AppRoutes() {
         </Routes>
       </PullToRefresh>
       <BottomNav />
+      {/* Always on screen, bumped on every commit — a quick way to tell whether
+          this device is running the latest version or a stale cached copy. */}
+      <span className="version-tag" title={`CMCHS Staff Schedule v${APP_VERSION}`}>v{APP_VERSION}</span>
     </div>
   )
 }
