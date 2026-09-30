@@ -10,6 +10,7 @@ import { shortNames } from '../utils/names'
 import { weekConflicts, onLeave } from '../utils/weekInsights'
 import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
 import { useUsers, useSchedules, useOnCall, useLocations } from '../hooks/useScheduleData'
+import useWeekGrid from '../hooks/useWeekGrid'
 import WeekNav from '../components/WeekNav'
 import DayPills from '../components/DayPills'
 import PeopleFilter, { filterPeople } from '../components/PeopleFilter'
@@ -75,6 +76,48 @@ export default function TeamWeek() {
   const cell = (u, i) => describeDay(weekOf.get(u.uid)?.[i], holidays[i])
   const commentOf = u => schedules[u.uid]?.comments || ''
   const nameLabel = u => (oncall?.uid === u.uid ? `${names.get(u.uid)} - OnCall` : names.get(u.uid))
+
+  // The desktop grid's own row order — the on-screen order people are
+  // listed in, across every team group, which is what a row index in a
+  // selection or a pasted block of rows actually means.
+  const gridRows = groups.flatMap(g => g.members)
+  const gridRowOf = new Map(gridRows.map((u, i) => [u.uid, i]))
+  const locationOf = (r, c) => normalizeSchedule(schedules[gridRows[r]?.uid]?.days)[c]?.location || ''
+
+  /** Cells changed by typing, pasting or clearing in the Excel-style grid. */
+  async function applyGridChanges(changes) {
+    const byUid = new Map()
+    for (const { r, c, location } of changes) {
+      const u = gridRows[r]
+      if (!u) continue
+      const entry = byUid.get(u.uid) || { person: u, days: normalizeSchedule(schedules[u.uid]?.days) }
+      entry.days = entry.days.map((d, i) => (i === c ? { ...d, location } : d))
+      byUid.set(u.uid, entry)
+    }
+    if (!byUid.size) return
+    try {
+      const typed = changes.map(ch => ch.location).filter(Boolean)
+      const fresh = await addNewLocations(typed, locations)
+      if (fresh.length) setLocations(prev => [...prev, ...fresh])
+      const entries = [...byUid.values()]
+      const saved = await Promise.all(entries.map(({ person, days }) =>
+        writeSchedule({ person, weekStart, days, comments: commentOf(person), editorUid: user.uid, existing: schedules[person.uid] })
+      ))
+      entries.forEach(({ person }, i) => patch(weekStart, person.uid, saved[i]))
+      showToast(entries.length > 1 ? `Updated ${entries.length} people.` : 'Saved.')
+    } catch (e) {
+      saveFailed(e)
+    }
+  }
+
+  const grid = useWeekGrid({
+    rowCount: gridRows.length,
+    colCount: 5,
+    valueOf: locationOf,
+    canEdit: r => canEdit(gridRows[r]),
+    onApply: applyGridChanges,
+    onDenied: () => showToast('Not allowed — you can only edit your own row.'),
+  })
 
   function saveFailed(e) {
     console.error(e)
@@ -238,8 +281,13 @@ export default function TeamWeek() {
             <p className="empty-note">No entries for this week yet. Public holidays are shown already.</p>
           )}
 
-          {/* Desktop: the whole week, like the Excel sheet */}
+          {/* Desktop: the whole week, like the Excel sheet — click and type,
+              drag or Shift-click to select a range, Ctrl+C/Ctrl+V to copy and
+              paste, just as you would in Excel (including pasting a block
+              Excel itself copied). Click a person's name for their whole week
+              at once — quick fills, clearing the week, their comment. */}
           <div className="wk-desktop">
+            <textarea {...grid.catcherProps} />
             <div className="wk-cols wk-head">
               <span>Name</span>
               {WEEK_DAYS.map((d, i) => (
@@ -256,28 +304,41 @@ export default function TeamWeek() {
                   <span className="wk-group-name">{g.label}</span>
                   <span className="wk-group-count">{g.members.length} {g.members.length === 1 ? 'person' : 'people'}</span>
                 </div>
-                {g.members.map(u => (
-                  <div key={u.uid} className="wk-cols wk-row" data-uid={u.uid}>
-                    <div className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`} title={u.displayName}>{nameLabel(u)}</div>
-                    {WEEK_DAYS.map((_, i) => {
-                      const c = cell(u, i)
-                      const Tagname = canEdit(u) ? 'button' : 'div'
-                      return (
-                        <Tagname
-                          key={i}
-                          type={canEdit(u) ? 'button' : undefined}
-                          className="wk-cell"
-                          style={{ background: c.bg, ...(c.filled && { color: INK }) }}
-                          title={c.text || undefined}
-                          onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx: i }) : undefined}
+                {g.members.map(u => {
+                  const r = gridRowOf.get(u.uid)
+                  return (
+                    <div key={u.uid} className="wk-cols wk-row" data-uid={u.uid}>
+                      {canEdit(u) ? (
+                        <button
+                          type="button"
+                          className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`}
+                          title={`${u.displayName} — open their whole week`}
+                          onClick={() => setEditing({ uid: u.uid, dayIdx })}
                         >
-                          {c.text}
-                        </Tagname>
-                      )
-                    })}
-                    {commentCell(u)}
-                  </div>
-                ))}
+                          {nameLabel(u)}
+                        </button>
+                      ) : (
+                        <div className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`} title={u.displayName}>{nameLabel(u)}</div>
+                      )}
+                      {WEEK_DAYS.map((_, i) => {
+                        const c = cell(u, i)
+                        const isEditingHere = grid.editing?.r === r && grid.editing?.c === i
+                        return (
+                          <div
+                            key={i}
+                            className={`wk-cell${grid.isSelected(r, i) ? ' wk-cell-selected' : ''}${grid.isAnchor(r, i) ? ' wk-cell-anchor' : ''}${canEdit(u) ? '' : ' wk-cell-readonly'}`}
+                            style={isEditingHere ? undefined : { background: c.bg, ...(c.filled && { color: INK }) }}
+                            title={isEditingHere ? undefined : c.text || undefined}
+                            {...grid.cellHandlers(r, i)}
+                          >
+                            {isEditingHere ? <input className="wk-cell-edit" {...grid.editingInputProps} /> : c.text}
+                          </div>
+                        )
+                      })}
+                      {commentCell(u)}
+                    </div>
+                  )
+                })}
               </div>
             ))}
           </div>

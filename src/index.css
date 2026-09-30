@@ -478,8 +478,23 @@ textarea.input { resize: vertical; min-height: 76px; }
   font: var(--weight-regular) 12.5px/1.3 var(--font-body); color: var(--text-strong); text-align: left;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-button.wk-cell { cursor: pointer; }
-button.wk-cell:hover { box-shadow: inset 0 0 0 2px var(--chs-purple-60); }
+.wk-cell { cursor: cell; user-select: none; }
+.wk-cell:hover { box-shadow: inset 0 0 0 1px var(--chs-purple-60); }
+.wk-cell-readonly { cursor: default; }
+.wk-cell-selected { box-shadow: inset 0 0 0 1px var(--chs-purple-60); background-color: var(--chs-purple-10, rgba(85, 69, 150, .08)); }
+.wk-cell-anchor { box-shadow: inset 0 0 0 2px var(--chs-purple); z-index: 1; }
+.wk-cell-edit {
+  width: 100%; height: 100%; padding: 0; border: none; background: transparent; color: inherit;
+  font: inherit; outline: none; box-shadow: 0 0 0 2px var(--chs-purple);
+}
+/* The clipboard/keyboard catcher: a real textarea, off-screen but genuinely
+   focusable and selectable, so native Ctrl+C / Ctrl+V behave exactly as they
+   do anywhere else — see useWeekGrid. */
+.wk-grid-catcher {
+  position: fixed; top: 0; left: 0; width: 1px; height: 1px;
+  opacity: 0; overflow: hidden; resize: none; border: none; padding: 0;
+  pointer-events: none;
+}
 .wk-comment {
   display: flex; align-items: center; gap: 6px; min-height: 32px; min-width: 0; padding: 0 8px;
   border: 1px solid transparent; border-radius: 3px; background: none; text-align: left;

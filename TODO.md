@@ -11,7 +11,10 @@ New CHS look plus Team week, Day, Leave calendar and On-call views, admin tap-to
 "Copy last week". Since then: Team week's Comments column is its own button, customer calls
 are rostered per day on the On-call page instead of being ticked by each person, and tapping
 a date in the Leave calendar books leave for a person over a date range. Tapping a day in
-Team week now opens that person's whole week, not just the day tapped.
+Team week now opens that person's whole week, not just the day tapped, and Team week's
+desktop grid is Excel-style: click and type, drag or Shift-click to select a range, and
+Ctrl+C/Ctrl+V to copy and paste a block — including to and from Excel itself. Click a
+person's name for the whole-week panel (quick fills, clearing the week, their comment).
 
 - [x] **#1** **Publish the updated `firestore.rules`** (done 2026-09-29) in Firebase Console → Firestore → Rules.
       Until then, admins can't save other people's entries, the on-call roster or the
