@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, addDaysISO, dayMonth, weekDates, normalizeCalls, WEEK_DAYS, DAY_SHORT } from '../utils/week'
+import { getCurrentWeekStart, addDaysISO, dayMonth, weekDates, normalizeCalls, normalizeSchedule, WEEK_DAYS, DAY_SHORT } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
+import { withoutCalls } from '../utils/status'
 import { shortNames } from '../utils/names'
-import { callsCover, callsCoverUids, weekConflicts } from '../utils/weekInsights'
-import { writeOnCall, writeCallsCover } from '../utils/scheduleStore'
+import { callsCover, callsCoverUids, hasCalls, weekConflicts } from '../utils/weekInsights'
+import { writeOnCall, writeCallsCover, writeSchedule } from '../utils/scheduleStore'
 import { useUsers, useSchedules, useOnCall } from '../hooks/useScheduleData'
 import Toast, { useToast } from '../components/Toast'
 import { Alert, Badge, Loading } from '../components/ui'
@@ -19,7 +20,7 @@ export default function OnCall() {
   const weeks = Array.from({ length: WEEKS_SHOWN }, (_, i) => addDaysISO(thisWeek, i * 7))
 
   const { users, loading: usersLoading } = useUsers()
-  const { byWeek, loading: schedLoading } = useSchedules(weeks)
+  const { byWeek, loading: schedLoading, patch } = useSchedules(weeks)
   const { byWeek: oncall, blocked, set } = useOnCall(weeks)
   const [toast, showToast] = useToast()
 
@@ -61,17 +62,35 @@ export default function OnCall() {
     }
   }
 
-  /** Customer calls cover for one weekday — rostered here, not by each person. */
+  /**
+   * Customer calls cover for one weekday — rostered here, not by each person.
+   * Anyone else whose own entry still claims that day has the claim taken off
+   * it, so one person covers a day and clearing here actually clears it
+   * instead of falling back to whoever typed "Customer Calls" into their week.
+   */
   async function assignCalls(week, dayIdx, uid) {
     const person = uid ? users.find(u => u.uid === uid) : null
     const day = `${WEEK_DAYS[dayIdx]} ${dayMonth(weekDates(week)[dayIdx])}`
     try {
       const saved = await writeCallsCover(week, dayIdx, person, user.uid, oncall[week])
       set(week, saved)
+      await dropOwnCalls(week, dayIdx, uid)
       showToast(person ? `${names.get(uid)} has customer calls on ${day}.` : `Customer calls cleared for ${day}.`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied' ? 'Not allowed yet — the updated database rules need publishing.' : 'Could not save — try again.')
+    }
+  }
+
+  /** Takes the customer-calls claim off everyone else's own entry for that day. */
+  async function dropOwnCalls(week, dayIdx, keepUid) {
+    const schedules = byWeek[week] || {}
+    for (const u of users) {
+      const existing = schedules[u.uid]
+      if (u.uid === keepUid || !hasCalls(existing?.days?.[dayIdx])) continue
+      const days = normalizeSchedule(existing.days).map((d, i) => (i === dayIdx ? withoutCalls(d) : d))
+      const comments = existing.comments || ''
+      patch(week, u.uid, await writeSchedule({ person: u, weekStart: week, days, comments, editorUid: user.uid, existing }))
     }
   }
 

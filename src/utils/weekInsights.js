@@ -4,7 +4,8 @@ import { holidayOn } from './holidays'
 
 const DAYS = [0, 1, 2, 3, 4]
 
-const hasCalls = day => !!day?.onCall || statusOf(day) === 'calls'
+/** Does this day claim customer calls — by the roster's flag, or its own text? */
+export const hasCalls = day => !!day?.onCall || statusOf(day) === 'calls'
 
 /**
  * Who covers customer calls each weekday — one person per day, as a

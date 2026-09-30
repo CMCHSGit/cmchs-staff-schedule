@@ -89,6 +89,21 @@ export function describeDay(day, holidayName = '') {
 
 const simplify = s => s.toLowerCase().replace(/[^a-z]/g, '').replace(/s$/, '')
 
+/**
+ * The same day with any customer-calls claim taken off it — the flag, and the
+ * "… / Customer Calls" the Excel writes into the text. Setting cover on the
+ * on-call roster uses this on everyone else's entry for that day, so the
+ * roster stays the one place a day's cover comes from.
+ */
+export function withoutCalls(day) {
+  const location = (day?.location || '')
+    .split('/')
+    .map(p => p.trim())
+    .filter(p => p && !/customer call|on[ -]?call/i.test(p))
+    .join(' / ')
+  return { ...day, location, onCall: false }
+}
+
 /** What goes into the Excel cell for a day — same text Team week shows. */
 export function excelCellText(day, holidayName = '') {
   return describeDay(day, holidayName).text
