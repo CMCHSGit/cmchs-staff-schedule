@@ -5,7 +5,8 @@ import { doc, getDoc } from 'firebase/firestore'
 import { Bell, Share, Phone, Info, CalendarClock } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, weekDates, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, daysWithCalls, DEFAULT_LOCATION } from '../utils/week'
+import { getCurrentWeekStart, weekDates, addDaysISO, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, daysWithCalls, DEFAULT_LOCATION } from '../utils/week'
+import { rankLocations } from '../utils/locations'
 import { holidayOn } from '../utils/holidays'
 import { describeDay } from '../utils/status'
 import { getTeamConfig, teamLabel, quickFillsForTeam } from '../utils/teams'
@@ -27,6 +28,7 @@ export default function MySchedule() {
   const [schedule,    setSchedule]    = useState(() => emptySchedule())
   const [comments,    setComments]    = useState('')
   const [existing,    setExisting]    = useState(null)
+  const [lastWeek,    setLastWeek]    = useState([]) // only to order the suggestions
   const [locations,   setLocations]   = useLocations()
   const [pendingLocations, setPendingLocations] = useState([]) // typed this session, not yet in Firestore
   const [loading,     setLoading]     = useState(true)
@@ -69,7 +71,13 @@ export default function MySchedule() {
     if (!user) return
     setLoading(true)
     try {
-      const snap = await getDoc(doc(db, 'schedules', scheduleId(weekStart, user.uid)))
+      // Last week comes along for the ride: it decides which locations the
+      // pickers offer first.
+      const [snap, before] = await Promise.all([
+        getDoc(doc(db, 'schedules', scheduleId(weekStart, user.uid))),
+        getDoc(doc(db, 'schedules', scheduleId(addDaysISO(weekStart, -7), user.uid))),
+      ])
+      setLastWeek(before.exists() ? normalizeSchedule(before.data().days) : [])
       if (snap.exists()) {
         const data = snap.data()
         setSchedule(normalizeSchedule(data.days))
@@ -106,14 +114,18 @@ export default function MySchedule() {
     setSchedule(prev => prev.map((d, i) => (holidays[i] ? d : { ...d, location: value })))
   }
 
-  const locationOptions = [
-    ...new Set([
-      ...(teamCfg?.defaultLocation ? [teamCfg.defaultLocation] : []),
-      DEFAULT_LOCATION,
-      ...locations,
-      ...schedule.map(d => d.location).filter(Boolean),
-    ]),
-  ]
+  // Wherever you were most last week first, then the rest alphabetically.
+  const locationOptions = rankLocations(
+    [
+      ...new Set([
+        ...(teamCfg?.defaultLocation ? [teamCfg.defaultLocation] : []),
+        DEFAULT_LOCATION,
+        ...locations,
+        ...schedule.map(d => d.location).filter(Boolean),
+      ]),
+    ],
+    lastWeek,
+  )
 
   function registerNewLocation(name) {
     const isKnown = l => l.toLowerCase() === name.toLowerCase()

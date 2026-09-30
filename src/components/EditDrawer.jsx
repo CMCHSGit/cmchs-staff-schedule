@@ -6,9 +6,8 @@ import LocationCombobox from './LocationCombobox'
 import { describeDay } from '../utils/status'
 import { STANDARD_QUICK_FILLS } from '../utils/teams'
 import { normalizeSchedule, weekDates, weekLabel, WEEK_DAYS, dayMonth } from '../utils/week'
+import { splitPlaces, rankLocations } from '../utils/locations'
 import { holidayOn } from '../utils/holidays'
-
-const splitPlaces = value => (value || '').split('/').map(p => p.trim()).filter(Boolean)
 
 /**
  * "Whereabouts" panel for one person's whole week, opened by tapping any cell
@@ -18,7 +17,7 @@ const splitPlaces = value => (value || '').split('/').map(p => p.trim()).filter(
  * column, and customer calls are rostered on the On-call page — neither is
  * set from here.
  */
-export default function EditDrawer({ person, name, isSelf, weekStart, dayIdx, schedule, locations, calls = [], onSave, onClose }) {
+export default function EditDrawer({ person, name, isSelf, weekStart, dayIdx, schedule, lastWeek, locations, calls = [], onSave, onClose }) {
   const dates = weekDates(weekStart)
   const holidays = dates.map(holidayOn)
 
@@ -38,7 +37,8 @@ export default function EditDrawer({ person, name, isSelf, weekStart, dayIdx, sc
   const registerNew = place =>
     setAdded(prev => (prev.some(p => p.toLowerCase() === place.toLowerCase()) ? prev : [...prev, place]))
 
-  const options = [...new Set([...locations, ...added, ...days.flatMap(d => splitPlaces(d.location))])]
+  // Wherever they were most last week first, then the rest alphabetically.
+  const options = rankLocations([...new Set([...locations, ...added, ...days.flatMap(d => splitPlaces(d.location))])], lastWeek)
 
   async function save() {
     setSaving(true)

@@ -318,6 +318,7 @@ export default function TeamWeek() {
           weekStart={weekStart}
           dayIdx={editing.dayIdx}
           schedule={schedules[editPerson.uid]}
+          lastWeek={normalizeSchedule(byWeek[prevWeek]?.[editPerson.uid]?.days)}
           locations={locations}
           calls={weekOf.get(editPerson.uid)?.map(d => d.onCall) || []}
           onSave={(days, typed) => saveEdit(editPerson, days, typed)}

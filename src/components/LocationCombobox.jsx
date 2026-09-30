@@ -1,9 +1,7 @@
 import { useRef, useState } from 'react'
 import { X } from 'lucide-react'
+import { SEPARATOR, splitPlaces } from '../utils/locations'
 
-/** "Starship / Cass Office" ⇄ ['Starship', 'Cass Office'] — how a day with several places is stored. */
-const SEPARATOR = ' / '
-const splitParts = value => (value || '').split('/').map(p => p.trim()).filter(Boolean)
 const sameText = (a, b) => a.toLowerCase() === b.toLowerCase()
 
 /**
@@ -18,7 +16,7 @@ const sameText = (a, b) => a.toLowerCase() === b.toLowerCase()
  * to onNewValue, so it becomes a suggestion right away.
  */
 export default function LocationCombobox({ value, options, onChange, onNewValue, tint, tintFg, placeholder = 'Type or pick a location…', id }) {
-  const parts = splitParts(value)
+  const parts = splitPlaces(value)
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
