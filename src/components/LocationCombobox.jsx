@@ -11,9 +11,11 @@ const sameText = (a, b) => a.toLowerCase() === b.toLowerCase()
  * saved as a single line joined with " / " (the way the Excel writes them), so
  * colours, Team week and the Excel copy all read it unchanged.
  *
- * Pick a suggestion or type one and press Enter (or just move on) to add it;
- * × or Backspace in the empty box removes one. Anything typed that isn't a
- * known location also goes to onNewValue, so it becomes a suggestion right away.
+ * Pick a suggestion or type one and press Enter (or just move on) to add it.
+ * Picking one closes the list, so a second place is never added by accident —
+ * click the box again to reopen it and add another. × or Backspace in the
+ * empty box removes one. Anything typed that isn't a known location also goes
+ * to onNewValue, so it becomes a suggestion right away.
  */
 export default function LocationCombobox({ value, options, onChange, onNewValue, tint, tintFg, placeholder = 'Type or pick a location…', id }) {
   const parts = splitParts(value)
@@ -34,6 +36,9 @@ export default function LocationCombobox({ value, options, onChange, onNewValue,
     const place = raw.trim()
     setText('')
     setHighlight(0)
+    // One pick, one place: the list closes rather than staying open under the
+    // cursor, where the next click would silently add a second location.
+    setOpen(false)
     if (!place || parts.some(p => sameText(p, place))) return
     setParts([...parts, place])
     if (!options.some(o => sameText(o, place))) onNewValue?.(place)
@@ -95,6 +100,9 @@ export default function LocationCombobox({ value, options, onChange, onNewValue,
           autoComplete="off"
           onChange={e => { setText(e.target.value); setOpen(true); setHighlight(0) }}
           onFocus={() => setOpen(true)}
+          // Reopens the list after a pick, when the box already has focus and so
+          // fires no focus event of its own.
+          onClick={() => setOpen(true)}
           // Moving on counts as done: whatever's typed is added, no Enter needed.
           onBlur={() => { add(text); setOpen(false) }}
           onKeyDown={handleKeyDown}
