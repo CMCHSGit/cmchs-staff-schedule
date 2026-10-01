@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { LogOut } from 'lucide-react'
+import { LogOut, Plane } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { teamLabel } from '../utils/teams'
 import { firstName } from '../utils/names'
@@ -67,6 +68,9 @@ export default function AccountMenu() {
           <span className="account-detail">
             {profile?.team ? teamLabel(profile.team) : 'No team yet'}{profile?.role === 'admin' ? ' · Admin' : ''}
           </span>
+          <Link to="/out-of-town" className="account-link" onClick={() => setOpen(false)}>
+            <Plane size={16} aria-hidden="true" />Out-of-town report
+          </Link>
           <Button variant="secondary" size="sm" block onClick={signOut} disabled={signingOut} iconLeft={<LogOut size={16} />}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>

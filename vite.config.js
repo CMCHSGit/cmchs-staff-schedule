@@ -11,7 +11,10 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // The Excel library (Out of town → Download) loads on demand instead —
+        // no reason for every phone to download ~1 MB it may never use.
+        globIgnores: ['**/exceljs*.js']
       },
       includeAssets: ['icons/*.png'],
       manifest: {
