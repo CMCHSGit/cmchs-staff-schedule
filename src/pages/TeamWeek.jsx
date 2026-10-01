@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Printer, Copy, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, addDaysISO, weekDates, fromISO, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
+import { getCurrentWeekStart, addDaysISO, weekDates, weekLabel, fromISO, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, INK } from '../utils/status'
 import { groupByTeam } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { onLeave } from '../utils/weekInsights'
 import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
+import { logActivity } from '../utils/activityLog'
 import { useUsers, useSchedules, useOnCall, useLocations } from '../hooks/useScheduleData'
 import useWeekGrid from '../hooks/useWeekGrid'
 import WeekNav from '../components/WeekNav'
@@ -74,6 +75,11 @@ export default function TeamWeek() {
   const cell = (u, i) => describeDay(weekOf.get(u.uid)?.[i], holidays[i])
   const commentOf = u => schedules[u.uid]?.comments || ''
   const nameLabel = u => (oncall?.uid === u.uid ? `${names.get(u.uid)} - OnCall` : names.get(u.uid))
+  /** Up to two initials for the person's avatar, from their full name. */
+  const initialsOf = u => {
+    const parts = (u.displayName || names.get(u.uid) || '?').trim().split(/\s+/).filter(Boolean)
+    return ((parts[0]?.[0] || '') + (parts[1]?.[0] || '')).toUpperCase() || '?'
+  }
 
   // The desktop grid's own row order — the on-screen order people are
   // listed in, across every team group, which is what a row index in a
@@ -103,6 +109,9 @@ export default function TeamWeek() {
       ))
       entries.forEach(({ person }, i) => patch(weekStart, person.uid, saved[i]))
       showToast(entries.length > 1 ? `Updated ${entries.length} people.` : 'Saved.')
+      const cellWord = changes.length === 1 ? 'cell' : 'cells'
+      const peopleWord = entries.length === 1 ? names.get(entries[0].person.uid) : `${entries.length} people`
+      logActivity(user, `Updated ${changes.length} ${cellWord} for ${peopleWord} in Team week (week of ${weekLabel(weekStart)}).`)
     } catch (e) {
       saveFailed(e)
     }
@@ -133,6 +142,7 @@ export default function TeamWeek() {
       patch(weekStart, person.uid, saved)
       setEditing(null)
       showToast('Saved.')
+      logActivity(user, `Updated ${names.get(person.uid)}'s whole week in Team week (week of ${weekLabel(weekStart)}).`)
     } catch (e) {
       saveFailed(e)
     }
@@ -147,6 +157,9 @@ export default function TeamWeek() {
       patch(weekStart, person.uid, saved)
       setCommenting(null)
       showToast(comments.trim() ? 'Comment saved.' : 'Comment cleared.')
+      logActivity(user, comments.trim()
+        ? `Set ${names.get(person.uid)}'s comment for week of ${weekLabel(weekStart)}: "${comments.trim()}"`
+        : `Cleared ${names.get(person.uid)}'s comment for week of ${weekLabel(weekStart)}.`)
     } catch (e) {
       saveFailed(e)
     }
@@ -177,6 +190,7 @@ export default function TeamWeek() {
         patch(weekStart, u.uid, saved)
       }
       showToast(`Copied from week starting ${dayMonth(prevWeek)}. Leave and holidays were not carried over.`)
+      logActivity(user, `Copied last week into week of ${weekLabel(weekStart)} for ${targets.length} ${targets.length === 1 ? 'person' : 'people'}.`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'
@@ -312,10 +326,14 @@ export default function TeamWeek() {
                           title={`${u.displayName} — open their whole week`}
                           onClick={() => setEditing({ uid: u.uid, dayIdx })}
                         >
-                          {nameLabel(u)}
+                          <span className="wk-name-avatar" aria-hidden="true">{initialsOf(u)}</span>
+                          <span className="wk-name-label">{nameLabel(u)}</span>
                         </button>
                       ) : (
-                        <div className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`} title={u.displayName}>{nameLabel(u)}</div>
+                        <div className={`wk-name${oncall?.uid === u.uid ? ' oncall' : ''}`} title={u.displayName}>
+                          <span className="wk-name-avatar" aria-hidden="true">{initialsOf(u)}</span>
+                          <span className="wk-name-label">{nameLabel(u)}</span>
+                        </div>
                       )}
                       {WEEK_DAYS.map((_, i) => {
                         const c = cell(u, i)
@@ -355,7 +373,10 @@ export default function TeamWeek() {
                         className="wkm-main"
                         onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx }) : undefined}
                       >
-                        <span className={`wkm-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>{nameLabel(u)}</span>
+                        <span className={`wkm-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>
+                          <span className="wk-name-avatar" aria-hidden="true">{initialsOf(u)}</span>
+                          {nameLabel(u)}
+                        </span>
                         <span className={`wkm-day${c.empty ? ' blank' : ''}`} style={{ background: c.bg, ...(c.filled && { color: INK }) }}>{c.text || 'No entry'}</span>
                       </Tagname>
                       {commentButton(u)}

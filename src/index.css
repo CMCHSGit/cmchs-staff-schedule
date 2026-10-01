@@ -450,30 +450,44 @@ textarea.input { resize: vertical; min-height: 76px; }
 /* ════════════════════════════════════════════════════════════════════
    Team week — Excel-style grid (desktop) / one day per person (phone)
    ════════════════════════════════════════════════════════════════════ */
-.wk-desktop { display: none; flex-direction: column; gap: 14px; }
+.wk-desktop { display: none; flex-direction: column; gap: 10px; }
 .wk-mobile { display: flex; flex-direction: column; gap: 14px; }
 @media (min-width: 760px) { .wk-desktop { display: flex; } .wk-mobile { display: none; } }
 
-.wk-cols { display: grid; grid-template-columns: 170px repeat(5, minmax(110px, 1fr)) 150px; gap: 4px; }
+.wk-cols { display: grid; grid-template-columns: 170px repeat(5, minmax(110px, 1fr)) 150px; gap: 3px; }
 .wk-head { padding: 0 4px; }
 .wk-head span { font: var(--type-overline); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wk-head button { background: none; border: none; padding: 0; text-align: left; cursor: pointer; font: var(--type-overline); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
 .wk-head button.selected { color: var(--accent-fg); }
 .wk-group { background: var(--surface-card); border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: auto; }
-.wk-group-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
-.wk-band { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--chs-black-40); flex: 0 0 auto; }
+.wk-group-head { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-bottom: 1px solid var(--border-subtle); }
+.wk-band { width: 11px; height: 11px; border-radius: 3px; border: 1px solid var(--chs-black-40); flex: 0 0 auto; }
 .wk-group-name { font: var(--type-body-strong); color: var(--text-strong); }
 .wk-group-count { font: var(--type-caption); color: var(--text-muted); }
-.wk-row { padding: 3px 4px; border-bottom: 1px solid var(--surface-subtle); min-width: 900px; }
+.wk-row { padding: 2px 4px; border-bottom: 1px solid var(--surface-subtle); min-width: 900px; }
 .wk-row:last-child { border-bottom: none; }
+/* The person button — an initials avatar plus their name, the same modern
+   pill shape as the account menu's own avatar. Flat and borderless at rest
+   so a dense sheet of them doesn't look like a wall of buttons; a tinted
+   background on hover is what says "click me". */
 .wk-name {
-  display: flex; align-items: center; padding: 0 8px; min-height: 32px; border-radius: 3px;
-  font: var(--weight-regular) 14px/1.3 var(--font-body); color: var(--text-strong);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 7px; padding: 0 8px 0 3px; min-height: 26px; border-radius: var(--radius-md);
+  font: var(--weight-regular) 13.5px/1.3 var(--font-body); color: var(--text-strong);
+  white-space: nowrap; overflow: hidden;
+}
+button.wk-name { border: none; background: none; cursor: pointer; text-align: left; width: 100%; }
+button.wk-name:hover { background: var(--surface-brand-tint); }
+button.wk-name:focus-visible { box-shadow: var(--focus-ring); }
+.wk-name-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-name-avatar {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--chs-purple); color: #fff;
+  font: var(--weight-semibold) 10px/1 var(--font-body); letter-spacing: .01em;
 }
 .wk-name.oncall { background: #FF7C80; font-weight: 600; color: var(--ink); }
+.wk-name.oncall .wk-name-avatar { background: var(--ink); color: #FF7C80; }
 .wk-cell {
-  display: flex; align-items: center; min-height: 32px; padding: 0 8px; min-width: 0;
+  display: flex; align-items: center; min-height: 26px; padding: 0 8px; min-width: 0;
   border: 1px solid var(--border-subtle); border-radius: 3px;
   font: var(--weight-regular) 12.5px/1.3 var(--font-body); color: var(--text-strong); text-align: left;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -496,7 +510,7 @@ textarea.input { resize: vertical; min-height: 76px; }
   pointer-events: none;
 }
 .wk-comment {
-  display: flex; align-items: center; gap: 6px; min-height: 32px; min-width: 0; padding: 0 8px;
+  display: flex; align-items: center; gap: 6px; min-height: 26px; min-width: 0; padding: 0 8px;
   border: 1px solid transparent; border-radius: 3px; background: none; text-align: left;
   font: var(--weight-regular) 12.5px/1.3 var(--font-body); color: var(--text-body);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -519,8 +533,9 @@ button.wkm-main { cursor: pointer; }
   color: var(--text-disabled); cursor: pointer;
 }
 .wkm-comment.has-note { color: var(--accent-fg); }
-.wkm-name { display: flex; align-items: center; padding: 6px 12px; font: var(--weight-regular) 15px/1.3 var(--font-body); color: var(--text-strong); }
+.wkm-name { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font: var(--weight-regular) 15px/1.3 var(--font-body); color: var(--text-strong); }
 .wkm-name.oncall { background: #FF7C80; font-weight: 600; color: var(--ink); }
+.wkm-name.oncall .wk-name-avatar { background: var(--ink); color: #FF7C80; }
 .wkm-day { display: flex; align-items: center; padding: 6px 12px; border-left: 1px dashed var(--chs-black-40); font: var(--weight-regular) 14px/1.3 var(--font-body); color: var(--text-strong); }
 .wkm-day.blank { color: var(--text-disabled); }
 
@@ -560,6 +575,16 @@ button.wkm-main { cursor: pointer; }
 .month-num.today { color: var(--accent-fg); }
 .month-holiday { font: var(--weight-semibold) 12.5px/1.3 var(--font-body); color: inherit; }
 .month-item { border-radius: 3px; padding: 2px 6px; font: var(--weight-regular) 12.5px/1.3 var(--font-body); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* In the drawer's "Already booked" list, a chip can carry its own × —
+   un-booking one day of someone's leave right from where it's listed. */
+.drawer-chips .month-item { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; font-size: 13.5px; white-space: normal; }
+.month-item-remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border: none; border-radius: 50%; background: none; padding: 0;
+  color: inherit; opacity: .6; cursor: pointer; flex: 0 0 auto;
+}
+.month-item-remove:hover { background: rgba(29,29,29,.12); opacity: 1; }
+.month-item-remove:disabled { opacity: .3; cursor: default; }
 .month-more { font: var(--type-caption); color: var(--text-muted); }
 .agenda-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); border: none; border-top: 1px solid var(--border-subtle); text-align: left; cursor: pointer; background: var(--surface-card); padding: 0; color: var(--text-strong); }
 .agenda-row:first-child { border-top: none; }
@@ -680,6 +705,14 @@ button.wkm-main { cursor: pointer; }
   .admin-people-head { display: grid; padding-top: 10px; padding-bottom: 10px; background: var(--surface-subtle); }
   .admin-people-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
 }
+/* Activity log — one line per action, newest first. */
+.activity-list { max-height: 70vh; overflow-y: auto; }
+.activity-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); font: var(--type-body-sm); }
+.activity-row:last-child { border-bottom: none; }
+.activity-when { flex: 0 0 auto; width: 120px; color: var(--text-muted); font: var(--type-caption); }
+.activity-who { flex: 0 0 auto; font-weight: var(--weight-semibold); color: var(--text-strong); }
+.activity-what { flex: 1 1 260px; min-width: 0; color: var(--text-body); }
+
 .admin-lock { max-width: 380px; margin: 40px auto 0; padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; }
 .admin-lock-icon { align-self: center; color: var(--accent-fg); }
 .version-note { text-align: center; font: var(--type-caption); color: var(--text-muted); padding: 8px 0 16px; }

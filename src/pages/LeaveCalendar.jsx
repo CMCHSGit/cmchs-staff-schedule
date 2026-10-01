@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { toISO, weekStartOf, addDaysISO, fromISO, weekdaysInRange, WEEK_DAYS, DAY_SHORT, MONTHS_LONG } from '../utils/week'
+import { toISO, weekStartOf, addDaysISO, fromISO, dayMonth, normalizeSchedule, weekdaysInRange, WEEK_DAYS, DAY_SHORT, MONTHS_LONG } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, STATUS, INK } from '../utils/status'
 import { shortNames } from '../utils/names'
 import { groupByTeam } from '../utils/teams'
-import { writeLeaveRange } from '../utils/scheduleStore'
+import { writeLeaveRange, writeSchedule } from '../utils/scheduleStore'
+import { logActivity } from '../utils/activityLog'
 import { useUsers, useSchedules } from '../hooks/useScheduleData'
 import LeaveDrawer from '../components/LeaveDrawer'
 import PeopleFilter, { filterPeople } from '../components/PeopleFilter'
@@ -87,11 +88,38 @@ export default function LeaveCalendar() {
       for (const w of written) patch(w.weekStart, person.uid, w.saved)
       setBooking(null)
       showToast(`${type} booked for ${names.get(person.uid)} — ${count} ${count === 1 ? 'day' : 'days'}.`)
+      logActivity(user, `Booked ${type} for ${names.get(person.uid)}, ${dayMonth(from)} – ${dayMonth(to)} (${count} ${count === 1 ? 'day' : 'days'}).`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'
         ? 'Not allowed — you can only book your own leave.'
         : 'Could not book that leave — try again.')
+    }
+  }
+
+  /**
+   * Un-books one day of leave for one person — clears just that day, the way
+   * it's offered in the drawer ("Already booked"). A multi-day booking is
+   * removed one day at a time, same as it was entered one week at a time.
+   */
+  async function removeLeave(uid, dateIso) {
+    const person = sorted.find(u => u.uid === uid)
+    if (!person) return
+    const weekStart = weekStartOf(fromISO(dateIso))
+    const dayIdx = (fromISO(dateIso).getDay() + 6) % 7
+    const existing = byWeek[weekStart]?.[uid]
+    const removedType = describeDay(existing?.days?.[dayIdx]).text
+    const daysArr = normalizeSchedule(existing?.days).map((d, i) => (i === dayIdx ? { location: '', onCall: d.onCall } : d))
+    try {
+      const saved = await writeSchedule({ person, weekStart, days: daysArr, comments: existing?.comments || '', editorUid: user.uid, existing })
+      patch(weekStart, uid, saved)
+      showToast(`Leave removed for ${names.get(uid)} on ${dayMonth(dateIso)}.`)
+      logActivity(user, `Removed ${removedType || 'leave'} for ${names.get(uid)} on ${dayMonth(dateIso)}.`)
+    } catch (e) {
+      console.error(e)
+      showToast(e.code === 'permission-denied'
+        ? 'Not allowed — you can only remove your own leave.'
+        : 'Could not remove that — try again.')
     }
   }
 
@@ -158,8 +186,10 @@ export default function LeaveCalendar() {
           names={names}
           defaultUid={user?.uid}
           canPickOthers={isAdmin}
+          canDelete={uid => isAdmin || uid === user?.uid}
           booked={bookingDay?.items || []}
           onSave={bookLeave}
+          onDelete={uid => removeLeave(uid, booking)}
           onOpenDay={() => navigate(`/day?date=${booking}`)}
           onClose={() => setBooking(null)}
         />

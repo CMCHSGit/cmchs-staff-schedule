@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarRange } from 'lucide-react'
+import { CalendarRange, X } from 'lucide-react'
 import Drawer, { DrawerHead } from './Drawer'
 import { Button } from './ui'
 import { LEAVE_TYPES } from '../utils/status'
@@ -11,13 +11,19 @@ import { holidayOn } from '../utils/holidays'
  * what kind, and the first and last day of it. Everyone can book their own;
  * admins can book for anyone. Weekends and public holidays inside the range
  * are skipped, and every other day of those weeks is left as it is.
+ *
+ * "Already booked" doubles as how leave gets *un*-booked: each chip there
+ * someone can edit gets a × that clears just that one day for them — a
+ * multi-day booking is removed one day at a time, the same way it was
+ * entered one week at a time.
  */
-export default function LeaveDrawer({ date, people, names, defaultUid, canPickOthers, booked = [], onSave, onOpenDay, onClose }) {
+export default function LeaveDrawer({ date, people, names, defaultUid, canPickOthers, canDelete, booked = [], onSave, onDelete, onOpenDay, onClose }) {
   const [uid, setUid] = useState(defaultUid && people.some(p => p.uid === defaultUid) ? defaultUid : people[0]?.uid || '')
   const [type, setType] = useState(LEAVE_TYPES[0])
   const [from, setFrom] = useState(date)
   const [to, setTo] = useState(date)
   const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState(null) // uid currently being removed
 
   const start = from
   const end = to < from ? from : to
@@ -31,6 +37,15 @@ export default function LeaveDrawer({ date, people, names, defaultUid, canPickOt
       await onSave({ person, from: start, to: end, type })
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function remove(bookedUid) {
+    setRemoving(bookedUid)
+    try {
+      await onDelete(bookedUid)
+    } finally {
+      setRemoving(null)
     }
   }
 
@@ -79,7 +94,22 @@ export default function LeaveDrawer({ date, people, names, defaultUid, canPickOt
         <div className="field">
           <span className="field-label">Already booked on {dayMonth(date)}</span>
           <div className="drawer-chips">
-            {booked.map(b => <span key={b.uid} className="month-item" style={{ background: b.bg }}>{b.name}</span>)}
+            {booked.map(b => (
+              <span key={b.uid} className="month-item" style={{ background: b.bg }}>
+                {b.name}
+                {canDelete?.(b.uid) && (
+                  <button
+                    type="button"
+                    className="month-item-remove"
+                    aria-label={`Remove leave for ${b.name} on ${dayMonth(date)}`}
+                    disabled={removing === b.uid}
+                    onClick={() => remove(b.uid)}
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                )}
+              </span>
+            ))}
           </div>
         </div>
       )}

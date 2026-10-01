@@ -5,13 +5,14 @@ import { doc, getDoc } from 'firebase/firestore'
 import { Bell, Share, Phone, Info, CalendarClock } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, weekDates, addDaysISO, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, daysWithCalls, DEFAULT_LOCATION } from '../utils/week'
+import { getCurrentWeekStart, weekDates, weekLabel, addDaysISO, toISO, WEEK_DAYS, dayMonth, emptySchedule, scheduleId, normalizeSchedule, daysWithCalls, DEFAULT_LOCATION } from '../utils/week'
 import { rankLocations } from '../utils/locations'
 import { holidayOn } from '../utils/holidays'
 import { describeDay } from '../utils/status'
 import { getTeamConfig, teamLabel, quickFillsForTeam } from '../utils/teams'
 import { canUsePush, needsHomeScreenInstall, pushEnabledOnThisDevice, enablePush, onForegroundMessage } from '../utils/push'
 import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
+import { logActivity } from '../utils/activityLog'
 import { useLocations, useOnCall } from '../hooks/useScheduleData'
 import WeekNav from '../components/WeekNav'
 import Toast, { useToast } from '../components/Toast'
@@ -142,6 +143,7 @@ export default function MySchedule() {
       const person = { uid: user.uid, displayName: profile?.displayName || user.displayName, email: user.email, team }
       const saved = await writeSchedule({ person, weekStart, days: schedule, comments, editorUid: user.uid, existing })
       setExisting(saved)
+      logActivity(user, `Updated their own week for week of ${weekLabel(weekStart)} in My week.`)
       showTeamWeek()
     } catch (e) {
       showToast('Save failed — try again.')

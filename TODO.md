@@ -18,7 +18,12 @@ person's name for the whole-week panel (quick fills, clearing the week, their co
 Team week is now the landing page — My week moved to `/my`, Team week took over `/` — and
 its "things to check this week" conflicts banner is gone. The Thursday reminder's links now
 point at `/my` specifically, so that call-to-action still lands people on their own schedule
-rather than on Team week.
+rather than on Team week. The Leave calendar's booking panel can now un-book a day of leave
+(a multi-day booking is removed one day at a time, from "Already booked"). Team week's
+desktop grid is noticeably more compact — tighter rows and group headers — and each person's
+name is a small initials-avatar pill rather than a plain label. Every schedule, leave,
+on-call and Admin change is now logged (who, when, what) to Admin's new password-protected
+Activity log tab.
 
 - [x] **#1** **Publish the updated `firestore.rules`** (done 2026-09-29) in Firebase Console → Firestore → Rules.
       Until then, admins can't save other people's entries, the on-call roster or the
@@ -30,6 +35,10 @@ rather than on Team week.
 - [ ] **#3** Matariki dates are listed to 2032 — extend the table in `holidays.js` before then.
 - [ ] **#4** Excel sync still writes text only, not the Excel fill colours — possible follow-up once
       the sync is live and proven.
+- [ ] **#31** **Publish the updated `firestore.rules`** again — the new `activity` collection
+      (Admin → Activity log) needs its own rule. Until then, every save still works (logging
+      fails silently in the background, per-action, the same way the Excel mirror does), but
+      the log itself stays empty and Admin → Activity log shows a banner saying so.
 
 ## Move off Vercel to GitHub only (live on GitHub Pages since 2026-09-29)
 

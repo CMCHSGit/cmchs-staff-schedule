@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import {
   collection, getDocs, addDoc, deleteDoc, doc, setDoc, updateDoc,
-  query, orderBy, serverTimestamp
+  query, orderBy, limit, serverTimestamp
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { Bell, Lock } from 'lucide-react'
+import { Bell, Lock, ScrollText } from 'lucide-react'
 import Toast from '../components/Toast'
 import { TEAMS, teamLabel } from '../utils/teams'
-import { Badge, Button, Loading } from '../components/ui'
+import { logActivity } from '../utils/activityLog'
+import { Alert, Badge, Button, Loading } from '../components/ui'
 import { APP_VERSION } from '../version'
 
 /**
@@ -88,7 +89,7 @@ export default function Admin() {
       <h1 className="page-title">Admin</h1>
 
       <div className="tabs" role="tablist">
-        {[['locations', 'Locations'], ['users', 'People']].map(([t, label]) => (
+        {[['locations', 'Locations'], ['users', 'People'], ['activity', 'Activity log']].map(([t, label]) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
             {label}
           </button>
@@ -97,6 +98,7 @@ export default function Admin() {
 
       {tab === 'locations' && <LocationsTab />}
       {tab === 'users'     && <UsersTab />}
+      {tab === 'activity'  && <ActivityTab />}
 
       <p className="version-note">CMCHS Staff Schedule v{APP_VERSION}</p>
     </div>
@@ -105,6 +107,7 @@ export default function Admin() {
 
 /* ── Locations tab ── */
 function LocationsTab() {
+  const { user } = useAuth()
   const [locations, setLocations] = useState([])
   const [newName,   setNewName]   = useState('')
   const [loading,   setLoading]   = useState(true)
@@ -130,12 +133,14 @@ function LocationsTab() {
     })
     setNewName('')
     showToast(`Added "${name}"`)
+    logActivity(user, `Added location "${name}" in Admin.`)
     load()
   }
 
   async function toggleActive(loc) {
     await updateDoc(doc(db, 'locations', loc.id), { active: !loc.active })
     showToast(loc.active ? `Hidden "${loc.name}"` : `Restored "${loc.name}"`)
+    logActivity(user, `${loc.active ? 'Hid' : 'Restored'} location "${loc.name}" in Admin.`)
     load()
   }
 
@@ -143,6 +148,7 @@ function LocationsTab() {
     if (!confirm(`Delete "${loc.name}"? This won't affect existing schedules.`)) return
     await deleteDoc(doc(db, 'locations', loc.id))
     showToast(`Deleted "${loc.name}"`)
+    logActivity(user, `Deleted location "${loc.name}" in Admin.`)
     load()
   }
 
@@ -200,6 +206,7 @@ function LocationsTab() {
 
 /* ── Users tab ── */
 function UsersTab() {
+  const { user } = useAuth()
   const [users,      setUsers]      = useState([])
   const [loading,    setLoading]    = useState(true)
   const [toast,      setToast]      = useState(null)
@@ -215,8 +222,12 @@ function UsersTab() {
   }
 
   async function updateUser(uid, field, value) {
+    const person = users.find(u => u.uid === uid)
     await updateDoc(doc(db, 'users', uid), { [field]: value })
     setUsers(prev => prev.map(u => u.uid === uid ? { ...u, [field]: value } : u))
+    const fieldLabel = field === 'team' ? 'team' : 'role'
+    const valueLabel = field === 'team' ? (teamLabel(value) || 'No team') : value
+    logActivity(user, `Set ${person?.displayName || uid}'s ${fieldLabel} to ${valueLabel} in Admin.`)
   }
 
   /**
@@ -240,6 +251,7 @@ function UsersTab() {
       setUsers(prev => [...prev, { uid: id, ...person }])
       setNewName('')
       showToast(`Added ${name}.`)
+      logActivity(user, `Added ${name} (${teamLabel(newTeam)}) in Admin.`)
     } catch (e) {
       console.error(e)
       showToast('Could not add them — try again.')
@@ -252,6 +264,7 @@ function UsersTab() {
     await deleteDoc(doc(db, 'users', u.uid))
     setUsers(prev => prev.filter(x => x.uid !== u.uid))
     showToast(`Removed ${u.displayName}.`)
+    logActivity(user, `Removed ${u.displayName} in Admin.`)
   }
 
   function showToast(msg) {
@@ -342,4 +355,74 @@ function UsersTab() {
       <Toast message={toast} />
     </div>
   )
+}
+
+/* ── Activity log tab ── */
+const LOG_LIMIT = 300
+
+function ActivityTab() {
+  const [entries, setEntries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [blocked, setBlocked] = useState(false)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    setBlocked(false)
+    try {
+      const q = query(collection(db, 'activity'), orderBy('at', 'desc'), limit(LOG_LIMIT))
+      const snap = await getDocs(q)
+      setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    } catch (e) {
+      console.error('Failed to load activity log:', e)
+      if (e.code === 'permission-denied') setBlocked(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="admin-layout">
+      <div className="admin-side">
+        <h2 className="admin-side-title">Activity log</h2>
+        <p className="text-sm text-muted">
+          Who changed what, most recent first — schedule edits, leave booked or removed, the
+          on-call roster, and changes made here in Admin. The last {LOG_LIMIT} actions. It's a
+          record, not an undo button: nothing here can be edited or deleted.
+        </p>
+        <Button variant="secondary" size="sm" onClick={load} disabled={loading}>Refresh</Button>
+      </div>
+
+      <div className="admin-main">
+        {blocked && (
+          <Alert tone="warning" icon={<ScrollText size={20} />} title="Log not switched on yet">
+            The database rules need updating before the activity log can be read — publish the
+            latest <code>firestore.rules</code> in the Firebase Console (Firestore → Rules).
+          </Alert>
+        )}
+        {loading ? <Loading /> : (
+          <div className="card admin-list activity-list">
+            {!entries.length && !blocked && (
+              <p className="text-sm text-muted" style={{ padding: 16 }}>Nothing logged yet.</p>
+            )}
+            {entries.map(e => (
+              <div key={e.id} className="activity-row">
+                <span className="activity-when">{formatWhen(e.at)}</span>
+                <span className="activity-who">{e.name}</span>
+                <span className="activity-what">{e.summary}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** "28 Sep, 3:45 pm" — in-progress writes (no server timestamp back yet) just say "Just now". */
+function formatWhen(at) {
+  const date = at?.toDate?.()
+  if (!date) return 'Just now'
+  return date.toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
 }

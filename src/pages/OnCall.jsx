@@ -7,6 +7,7 @@ import { withoutCalls } from '../utils/status'
 import { shortNames } from '../utils/names'
 import { callsCover, callsCoverUids, hasCalls, weekConflicts } from '../utils/weekInsights'
 import { writeOnCall, writeCallsCover, writeSchedule } from '../utils/scheduleStore'
+import { logActivity } from '../utils/activityLog'
 import { useUsers, useSchedules, useOnCall } from '../hooks/useScheduleData'
 import Toast, { useToast } from '../components/Toast'
 import { Alert, Badge, Loading } from '../components/ui'
@@ -56,6 +57,9 @@ export default function OnCall() {
       const saved = await writeOnCall(week, person, user.uid, oncall[week])
       set(week, saved)
       showToast(person ? `${names.get(uid)} is on call for the week starting ${dayMonth(week)}.` : `On call cleared for ${dayMonth(week)}.`)
+      logActivity(user, person
+        ? `Set ${names.get(uid)} on call for week of ${dayMonth(week)}.`
+        : `Cleared on call for week of ${dayMonth(week)}.`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied' ? 'Not allowed yet — the updated database rules need publishing.' : 'Could not save — try again.')
@@ -76,6 +80,9 @@ export default function OnCall() {
       set(week, saved)
       await dropOwnCalls(week, dayIdx, uid)
       showToast(person ? `${names.get(uid)} has customer calls on ${day}.` : `Customer calls cleared for ${day}.`)
+      logActivity(user, person
+        ? `Set customer calls cover to ${names.get(uid)} on ${day}.`
+        : `Cleared customer calls cover for ${day}.`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied' ? 'Not allowed yet — the updated database rules need publishing.' : 'Could not save — try again.')

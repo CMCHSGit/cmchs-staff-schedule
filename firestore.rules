@@ -51,5 +51,15 @@ service cloud.firestore {
       allow read:  if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // Activity log — "who changed what", read on Admin → Activity log.
+    // Anyone signed in can log their own action (so a non-admin saving their
+    // own week or booking their own leave still gets recorded); only admins
+    // can read it back. Immutable: no update or delete, not even for admins —
+    // an audit trail that can be edited isn't one.
+    match /activity/{entryId} {
+      allow read:   if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
   }
 }
