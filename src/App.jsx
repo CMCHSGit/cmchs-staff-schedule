@@ -14,6 +14,7 @@ import PullToRefresh  from './components/PullToRefresh'
 import AccountMenu    from './components/AccountMenu'
 import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
 import { useTheme } from './utils/theme'
+import useIsDesktop from './hooks/useIsDesktop'
 import { APP_VERSION } from './version'
 
 // Short labels for the phone's bottom bar, fuller ones for desktop tabs.
@@ -21,7 +22,8 @@ import { APP_VERSION } from './version'
 // is the more useful thing to see first; My week moved to its own path.
 const VIEWS = [
   { to: '/',       label: 'Team',      tab: 'Team week',      Icon: CalendarDays },
-  { to: '/my',     label: 'My week',   tab: 'My week',        Icon: CalendarCheck },
+  // Phones only — on desktop, Team week's grid is where you update your own row.
+  { to: '/my',     label: 'My week',   tab: 'My week',        Icon: CalendarCheck, phoneOnly: true },
   { to: '/day',    label: 'Day',       tab: 'Day',            Icon: MapPin },
   { to: '/leave',  label: 'Leave',     tab: 'Leave calendar', Icon: CalendarRange },
   { to: '/oncall', label: 'On call',   tab: 'On call',        Icon: Phone },
@@ -40,6 +42,7 @@ export default function App() {
 function AppRoutes() {
   const { user, profileReady } = useAuth()
   const [refreshKey, setRefreshKey] = useState(0)
+  const isDesktop = useIsDesktop()
 
   if (user === undefined || (user && !profileReady)) {
     return <div className="loading-screen"><Spinner size={32} /></div>
@@ -68,7 +71,7 @@ function AppRoutes() {
       <PullToRefresh onRefresh={handleRefresh}>
         <Routes key={refreshKey}>
           <Route path="/"       element={<TeamWeek />} />
-          <Route path="/my"     element={<MySchedule />} />
+          <Route path="/my"     element={isDesktop ? <Navigate to="/" replace /> : <MySchedule />} />
           <Route path="/day"    element={<DayView />} />
           <Route path="/leave"  element={<LeaveCalendar />} />
           <Route path="/oncall" element={<OnCall />} />
@@ -100,7 +103,7 @@ function AppHeader() {
           <span className="app-title">Staff schedule</span>
         </NavLink>
         <nav className="header-tabs" aria-label="Views">
-          {VIEWS.map(v => (
+          {VIEWS.filter(v => !v.phoneOnly).map(v => (
             <NavLink key={v.to} to={v.to} end className={({ isActive }) => `header-tab${isActive ? ' active' : ''}`}>
               {v.tab}
             </NavLink>
