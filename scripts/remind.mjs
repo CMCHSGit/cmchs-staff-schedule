@@ -76,7 +76,7 @@ async function sendReminderEmail(to, name, weekStart) {
             You haven't filled out your location schedule for <strong>${weekLabel}</strong> yet.
             It only takes a minute — let the team know where you'll be each day.
           </p>
-          <a href="${process.env.APP_URL}"
+          <a href="${process.env.APP_URL}/my"
              style="display: inline-block; background: #554596; color: #fff; text-decoration: none;
                     padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: 600;">
             Fill in my schedule
@@ -112,7 +112,7 @@ async function sendPushToUser(db, user, weekStart) {
       title: 'Where are you next week?',
       body:  `You haven't filled out your schedule for ${weekLabel} yet.`,
     },
-    data: { url: process.env.APP_URL },
+    data: { url: `${process.env.APP_URL}/my` },
   })
 
   const deadTokens = response.responses

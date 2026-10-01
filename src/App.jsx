@@ -17,9 +17,11 @@ import { useTheme } from './utils/theme'
 import { APP_VERSION } from './version'
 
 // Short labels for the phone's bottom bar, fuller ones for desktop tabs.
+// Team week is the landing page — it's what everyone else is doing, which
+// is the more useful thing to see first; My week moved to its own path.
 const VIEWS = [
-  { to: '/',       label: 'My week',   tab: 'My week',        Icon: CalendarCheck },
-  { to: '/team',   label: 'Team',      tab: 'Team week',      Icon: CalendarDays },
+  { to: '/',       label: 'Team',      tab: 'Team week',      Icon: CalendarDays },
+  { to: '/my',     label: 'My week',   tab: 'My week',        Icon: CalendarCheck },
   { to: '/day',    label: 'Day',       tab: 'Day',            Icon: MapPin },
   { to: '/leave',  label: 'Leave',     tab: 'Leave calendar', Icon: CalendarRange },
   { to: '/oncall', label: 'On call',   tab: 'On call',        Icon: Phone },
@@ -65,12 +67,15 @@ function AppRoutes() {
       <AppHeader />
       <PullToRefresh onRefresh={handleRefresh}>
         <Routes key={refreshKey}>
-          <Route path="/"       element={<MySchedule />} />
-          <Route path="/team"   element={<TeamWeek />} />
+          <Route path="/"       element={<TeamWeek />} />
+          <Route path="/my"     element={<MySchedule />} />
           <Route path="/day"    element={<DayView />} />
           <Route path="/leave"  element={<LeaveCalendar />} />
           <Route path="/oncall" element={<OnCall />} />
           <Route path="/admin"  element={<Admin />} />
+          {/* /team was Team week's path before it became the default — kept
+              working for anyone's old bookmark or home-screen shortcut. */}
+          <Route path="/team"   element={<Navigate to="/" replace />} />
           <Route path="*"       element={<Navigate to="/" replace />} />
         </Routes>
       </PullToRefresh>
@@ -88,7 +93,7 @@ function AppHeader() {
   return (
     <header className="app-header">
       <div className="app-header-row">
-        <NavLink to="/" className="app-brand" aria-label="Staff schedule — my week">
+        <NavLink to="/" className="app-brand" aria-label="Staff schedule — team week">
           <span className="logo-full logo-plate"><Logo width={124} /></span>
           <span className="brand-divider" />
           <span className="logo-mark"><Logo variant="mark" width={32} /></span>

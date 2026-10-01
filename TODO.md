@@ -15,6 +15,10 @@ Team week now opens that person's whole week, not just the day tapped, and Team 
 desktop grid is Excel-style: click and type, drag or Shift-click to select a range, and
 Ctrl+C/Ctrl+V to copy and paste a block — including to and from Excel itself. Click a
 person's name for the whole-week panel (quick fills, clearing the week, their comment).
+Team week is now the landing page — My week moved to `/my`, Team week took over `/` — and
+its "things to check this week" conflicts banner is gone. The Thursday reminder's links now
+point at `/my` specifically, so that call-to-action still lands people on their own schedule
+rather than on Team week.
 
 - [x] **#1** **Publish the updated `firestore.rules`** (done 2026-09-29) in Firebase Console → Firestore → Rules.
       Until then, admins can't save other people's entries, the on-call roster or the

@@ -7,7 +7,7 @@ import { holidayOn } from '../utils/holidays'
 import { describeDay, INK } from '../utils/status'
 import { groupByTeam } from '../utils/teams'
 import { shortNames } from '../utils/names'
-import { weekConflicts, onLeave } from '../utils/weekInsights'
+import { onLeave } from '../utils/weekInsights'
 import { writeSchedule, addNewLocations } from '../utils/scheduleStore'
 import { useUsers, useSchedules, useOnCall, useLocations } from '../hooks/useScheduleData'
 import useWeekGrid from '../hooks/useWeekGrid'
@@ -15,7 +15,6 @@ import WeekNav from '../components/WeekNav'
 import DayPills from '../components/DayPills'
 import PeopleFilter, { filterPeople } from '../components/PeopleFilter'
 import LeavePin from '../components/LeavePin'
-import WeekAlerts from '../components/WeekAlerts'
 import Legend from '../components/Legend'
 import EditDrawer from '../components/EditDrawer'
 import CommentDrawer from '../components/CommentDrawer'
@@ -67,7 +66,6 @@ export default function TeamWeek() {
   const people = filterPeople(sorted, names, query, teamSel)
   const groups = groupByTeam(people)
   const teamOptions = groupByTeam(sorted)
-  const conflicts = isAdmin ? weekConflicts({ weekStart, users: sorted, schedules, oncall, names }) : []
   const leaveToday = onLeave({ weekStart, dayIdx, users: people, schedules })
   const hasEntries = Object.keys(schedules).length > 0
   const notFilled = sorted.filter(u => !weekOf.get(u.uid).some(d => d.location || d.onCall)).length
@@ -272,7 +270,6 @@ export default function TeamWeek() {
       <div className="show-narrow"><DayPills weekStart={weekStart} value={dayIdx} onChange={setDayIdx} /></div>
 
       <LeavePin weekStart={weekStart} dayIdx={dayIdx} people={leaveToday} names={names} />
-      <WeekAlerts conflicts={conflicts} />
       <div className="hide-narrow"><Legend /></div>
 
       {loading ? <Loading /> : (

@@ -159,7 +159,7 @@ export default function MySchedule() {
   function showTeamWeek() {
     const go = () => {
       window.scrollTo(0, 0)
-      navigate('/team', { state: { weekStart, focusUid: user.uid, toast: 'Schedule saved — here it is in Team week.' } })
+      navigate('/', { state: { weekStart, focusUid: user.uid, toast: 'Schedule saved — here it is in Team week.' } })
     }
     const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     if (document.startViewTransition && !calm) document.startViewTransition(() => flushSync(go))
