@@ -18,6 +18,10 @@ import { IconButton, Loading } from '../components/ui'
 
 const MAX_ITEMS = 4
 
+/** One calendar day back/forward, skipping weekends — leave only ever runs Mon–Fri. */
+const prevWeekday = iso => { let d = addDaysISO(iso, -1); while ([0, 6].includes(fromISO(d).getDay())) d = addDaysISO(d, -1); return d }
+const nextWeekday = iso => { let d = addDaysISO(iso, 1); while ([0, 6].includes(fromISO(d).getDay())) d = addDaysISO(d, 1); return d }
+
 /** Every weekday of the month (plus the edges of its first/last weeks), in Monday-first weeks. */
 function monthWeeks(year, month) {
   const first = new Date(year, month, 1)
@@ -75,20 +79,102 @@ export default function LeaveCalendar() {
   // Everyone can book their own leave; admins can book anyone's — the same
   // rule the database enforces, so nobody is offered a save that will fail.
   const bookable = isAdmin ? sorted : sorted.filter(u => u.uid === user?.uid)
-  const bookingDay = booking ? days.find(d => d.iso === booking) : null
+
+  /** One person's day, read straight out of the weeks already loaded for this month. */
+  function dayFor(iso, uid) {
+    const ws = weekStartOf(fromISO(iso))
+    const dayIdx = (fromISO(iso).getDay() + 6) % 7
+    return byWeek[ws]?.[uid]?.days?.[dayIdx]
+  }
 
   /**
-   * Books the leave, then updates what's on screen without a reload. Weeks outside the month in
-   * view simply load fresh when they come into view.
+   * The full run of consecutive days this booking actually covers — not just
+   * the one day tapped. Walks outward from it while the same leave (or
+   * training) type keeps showing up, tunnelling through any public holiday
+   * in between (a booking can span one without breaking) but stopping at a
+   * genuine gap or a different type. Only ever looks at weeks already loaded
+   * for the month in view — a booking extending past that reads as ending there.
    */
-  async function bookLeave({ person, from, to, type }) {
+  function leaveRangeFor(uid, dateIso, status, text) {
+    const matches = iso => {
+      const h = holidayOn(iso)
+      if (h) return null // tunnel through — neither a match nor a break
+      const d = describeDay(dayFor(iso, uid), h)
+      return d.status === status && d.text === text
+    }
+    let from = dateIso
+    for (let cursor = dateIso, guard = 0; guard < 60; guard++) {
+      const prev = prevWeekday(cursor)
+      const m = matches(prev)
+      if (m === null) { cursor = prev; continue }
+      if (!m) break
+      from = prev
+      cursor = prev
+    }
+    let to = dateIso
+    for (let cursor = dateIso, guard = 0; guard < 60; guard++) {
+      const next = nextWeekday(cursor)
+      const m = matches(next)
+      if (m === null) { cursor = next; continue }
+      if (!m) break
+      to = next
+      cursor = next
+    }
+    return { from, to }
+  }
+
+  /** Every "already booked" row covering the tapped day — one per person, grouped into its full run. */
+  function groupLeaveOnDay(dateIso) {
+    const out = []
+    for (const u of sorted) {
+      const d = describeDay(dayFor(dateIso, u.uid))
+      if (d.status !== 'leave' && d.status !== 'training') continue
+      const { from, to } = leaveRangeFor(u.uid, dateIso, d.status, d.text)
+      out.push({ uid: u.uid, name: names.get(u.uid), bg: d.status === 'leave' ? STATUS.leave.bg : STATUS.training.bg, type: d.text, from, to })
+    }
+    return out
+  }
+
+  const bookingGroups = booking ? groupLeaveOnDay(booking) : []
+
+  /** Clears one person's leave/training on exactly these days — the shared primitive behind both editing and deleting a booking. */
+  async function clearLeaveDays(uid, isoList) {
+    const person = sorted.find(u => u.uid === uid)
+    if (!person || !isoList.length) return
+    const byWeekIdx = new Map()
+    for (const iso of isoList) {
+      const ws = weekStartOf(fromISO(iso))
+      const dayIdx = (fromISO(iso).getDay() + 6) % 7
+      byWeekIdx.set(ws, [...(byWeekIdx.get(ws) || []), dayIdx])
+    }
+    for (const [ws, idxs] of byWeekIdx) {
+      const existing = byWeek[ws]?.[uid]
+      const daysArr = normalizeSchedule(existing?.days).map((d, i) => (idxs.includes(i) ? { location: '', onCall: d.onCall } : d))
+      const saved = await writeSchedule({ person, weekStart: ws, days: daysArr, comments: existing?.comments || '', editorUid: user.uid, existing })
+      patch(ws, uid, saved)
+    }
+  }
+
+  /**
+   * Books the leave, then updates what's on screen without a reload. When
+   * this is editing an existing booking (`replacing` carries its original
+   * from/to), whatever the old range covered that the new one no longer does
+   * gets cleared too — otherwise shrinking a booking would just leave the
+   * trimmed-off days still marked as leave.
+   */
+  async function bookLeave({ person, from, to, type, replacing }) {
     const count = weekdaysInRange(from, to).filter(d => !holidayOn(d.iso)).length
     try {
       const written = await writeLeaveRange({ person, from, to, type, editorUid: user.uid })
       for (const w of written) patch(w.weekStart, person.uid, w.saved)
+      if (replacing) {
+        const keep = new Set(weekdaysInRange(from, to).map(d => d.iso))
+        const drop = weekdaysInRange(replacing.from, replacing.to).filter(d => !holidayOn(d.iso) && !keep.has(d.iso)).map(d => d.iso)
+        if (drop.length) await clearLeaveDays(person.uid, drop)
+      }
       setBooking(null)
       showToast(`${type} booked for ${names.get(person.uid)} — ${count} ${count === 1 ? 'day' : 'days'}.`)
-      logActivity(user, `Booked ${type} for ${names.get(person.uid)}, ${dayMonth(from)} – ${dayMonth(to)} (${count} ${count === 1 ? 'day' : 'days'}).`)
+      logActivity(user, `${replacing ? 'Updated' : 'Booked'} ${type} for ${names.get(person.uid)}, ${dayMonth(from)} – ${dayMonth(to)} (${count} ${count === 1 ? 'day' : 'days'}).`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'
@@ -98,23 +184,17 @@ export default function LeaveCalendar() {
   }
 
   /**
-   * Un-books one day of leave for one person — clears just that day, the way
-   * it's offered in the drawer ("Already booked"). A multi-day booking is
-   * removed one day at a time, same as it was entered one week at a time.
+   * Un-books a whole run in one go — the way it's offered in the drawer
+   * ("Already booked"): one × clears every day from..to, not day by day.
    */
-  async function removeLeave(uid, dateIso) {
-    const person = sorted.find(u => u.uid === uid)
-    if (!person) return
-    const weekStart = weekStartOf(fromISO(dateIso))
-    const dayIdx = (fromISO(dateIso).getDay() + 6) % 7
-    const existing = byWeek[weekStart]?.[uid]
-    const removedType = describeDay(existing?.days?.[dayIdx]).text
-    const daysArr = normalizeSchedule(existing?.days).map((d, i) => (i === dayIdx ? { location: '', onCall: d.onCall } : d))
+  async function removeLeaveRange(uid, from, to) {
+    const isoList = weekdaysInRange(from, to).filter(d => !holidayOn(d.iso)).map(d => d.iso)
+    const type = describeDay(dayFor(from, uid)).text
+    const range = from === to ? dayMonth(from) : `${dayMonth(from)} – ${dayMonth(to)}`
     try {
-      const saved = await writeSchedule({ person, weekStart, days: daysArr, comments: existing?.comments || '', editorUid: user.uid, existing })
-      patch(weekStart, uid, saved)
-      showToast(`Leave removed for ${names.get(uid)} on ${dayMonth(dateIso)}.`)
-      logActivity(user, `Removed ${removedType || 'leave'} for ${names.get(uid)} on ${dayMonth(dateIso)}.`)
+      await clearLeaveDays(uid, isoList)
+      showToast(`${type || 'Leave'} removed for ${names.get(uid)}, ${range}.`)
+      logActivity(user, `Removed ${type || 'leave'} for ${names.get(uid)}, ${range}.`)
     } catch (e) {
       console.error(e)
       showToast(e.code === 'permission-denied'
@@ -187,9 +267,9 @@ export default function LeaveCalendar() {
           defaultUid={user?.uid}
           canPickOthers={isAdmin}
           canDelete={uid => isAdmin || uid === user?.uid}
-          booked={bookingDay?.items || []}
+          booked={bookingGroups}
           onSave={bookLeave}
-          onDelete={uid => removeLeave(uid, booking)}
+          onDelete={(uid, from, to) => removeLeaveRange(uid, from, to)}
           onOpenDay={() => navigate(`/day?date=${booking}`)}
           onClose={() => setBooking(null)}
         />

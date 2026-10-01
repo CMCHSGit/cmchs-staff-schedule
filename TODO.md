@@ -18,12 +18,15 @@ person's name for the whole-week panel (quick fills, clearing the week, their co
 Team week is now the landing page — My week moved to `/my`, Team week took over `/` — and
 its "things to check this week" conflicts banner is gone. The Thursday reminder's links now
 point at `/my` specifically, so that call-to-action still lands people on their own schedule
-rather than on Team week. The Leave calendar's booking panel can now un-book a day of leave
-(a multi-day booking is removed one day at a time, from "Already booked"). Team week's
-desktop grid is noticeably more compact — tighter rows and group headers — and each person's
-name is a small initials-avatar pill rather than a plain label. Every schedule, leave,
-on-call and Admin change is now logged (who, when, what) to Admin's new password-protected
-Activity log tab.
+rather than on Team week. Team week's desktop grid is noticeably more compact — tighter
+rows and group headers — and each person's name is a small initials-avatar pill rather than
+a plain label. Every schedule, leave, on-call and Admin change is now logged (who, when,
+what) to Admin's new password-protected Activity log tab. Every page's top is more compact
+too (tighter gaps between the title, week nav, filters and the leave pin). The Leave
+calendar's booking panel groups a person's consecutive leave into one "Already booked" row
+— covering the whole run, not just the day tapped — with its own edit (adjust the dates;
+shrinking it clears what's no longer covered) and delete (clears the whole run in one go,
+no longer one day at a time).
 
 - [x] **#1** **Publish the updated `firestore.rules`** (done 2026-09-29) in Firebase Console → Firestore → Rules.
       Until then, admins can't save other people's entries, the on-call roster or the

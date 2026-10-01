@@ -271,7 +271,7 @@ textarea.input { resize: vertical; min-height: 76px; }
 .app-content { flex: 1; padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom)); }
 .ptr-indicator { display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--text-muted); }
 
-.page { width: 100%; max-width: 1440px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.page { width: 100%; max-width: 1440px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .page-narrow { max-width: 640px; }
 .page-head { display: flex; align-items: flex-start; gap: 12px; }
 .page-head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -292,7 +292,7 @@ textarea.input { resize: vertical; min-height: 76px; }
   .header-admin-label { display: inline; }
   .bottom-nav { display: none; }
   .app-content { padding-bottom: 48px; }
-  .page { padding: 24px; }
+  .page { padding: 18px 24px; }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -331,7 +331,7 @@ textarea.input { resize: vertical; min-height: 76px; }
 .day-pill-num { font: var(--weight-semibold) 18px/1.2 var(--font-display); }
 
 .leave-pin { position: sticky; top: calc(60px + env(safe-area-inset-top)); z-index: 5; background: var(--surface-page); padding: 6px 0; margin: -6px 0; }
-.leave-pin-inner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid #FFC000; border-radius: var(--radius-md); padding: 8px 12px; background: var(--surface-page); color: var(--text-strong); }
+.leave-pin-inner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; border: 1px solid #FFC000; border-radius: var(--radius-md); padding: 5px 12px; background: var(--surface-page); color: var(--text-strong); }
 .leave-pin-title { font: var(--type-body-strong); margin-right: 4px; }
 .leave-chip { background: #FFC000; border-radius: var(--radius-sm); padding: 2px 8px; font: var(--weight-regular) 14px/1.4 var(--font-body); color: var(--ink); white-space: nowrap; }
 @media (min-width: 760px) { .leave-pin { top: 68px; } }
@@ -575,16 +575,6 @@ button.wkm-main { cursor: pointer; }
 .month-num.today { color: var(--accent-fg); }
 .month-holiday { font: var(--weight-semibold) 12.5px/1.3 var(--font-body); color: inherit; }
 .month-item { border-radius: 3px; padding: 2px 6px; font: var(--weight-regular) 12.5px/1.3 var(--font-body); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* In the drawer's "Already booked" list, a chip can carry its own × —
-   un-booking one day of someone's leave right from where it's listed. */
-.drawer-chips .month-item { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; font-size: 13.5px; white-space: normal; }
-.month-item-remove {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border: none; border-radius: 50%; background: none; padding: 0;
-  color: inherit; opacity: .6; cursor: pointer; flex: 0 0 auto;
-}
-.month-item-remove:hover { background: rgba(29,29,29,.12); opacity: 1; }
-.month-item-remove:disabled { opacity: .3; cursor: default; }
 .month-more { font: var(--type-caption); color: var(--text-muted); }
 .agenda-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); border: none; border-top: 1px solid var(--border-subtle); text-align: left; cursor: pointer; background: var(--surface-card); padding: 0; color: var(--text-strong); }
 .agenda-row:first-child { border-top: none; }
@@ -659,8 +649,15 @@ button.wkm-main { cursor: pointer; }
 .drawer-day-date { font: var(--type-caption); color: var(--text-muted); }
 .drawer-day-head .badge { margin-left: auto; }
 .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.drawer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .field-static { font: var(--type-body); color: var(--text-strong); }
+/* "Already booked" — one row per consecutive run, not per day. */
+.booked-rows { display: flex; flex-direction: column; gap: 4px; }
+.booked-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px 6px 8px; border-radius: var(--radius-sm); background: var(--surface-subtle); }
+.booked-row-swatch { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; }
+.booked-row-text { flex: 1; min-width: 0; font: var(--type-body-sm); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.booked-row-name { font-weight: var(--weight-semibold); color: var(--text-strong); }
+.booked-row-actions { flex: 0 0 auto; display: flex; gap: 2px; }
+.editing-note { padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-brand-tint); color: var(--text-strong); }
 
 /* ════════════════════════════════════════════════════════════════════
    Admin, sign-in, team picker
