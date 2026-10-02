@@ -13,6 +13,7 @@ import OutOfTown     from './pages/OutOfTown'
 import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
 import AccountMenu    from './components/AccountMenu'
+import UpdateBanner   from './components/UpdateBanner'
 import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
 import { useTheme } from './utils/theme'
 import { APP_VERSION } from './version'
@@ -37,6 +38,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
+      <UpdateBanner />
     </AuthProvider>
   )
 }

@@ -174,6 +174,30 @@ The app will open full-screen without browser chrome, like a native app.
 
 ---
 
+## How phones get new versions
+
+The app is saved on each device (a service worker, `src/sw.js`) so it opens instantly and works
+offline. Left alone, a phone only looks for a new version when the app is freshly launched and
+shows it one launch later — and an iPhone pauses the app moments after it leaves the screen,
+which can cut the download short. So a phone could sit on an old version for days. To avoid that,
+`src/utils/appUpdates.js`:
+
+- asks for a newer version whenever the app comes back to the front, when the phone comes back
+  online, and hourly while it's open;
+- once a newer version has taken over, an **untouched** page reloads itself; a page that has been
+  used shows an **"A new version is ready — Update"** banner (`UpdateBanner.jsx`), because a reload
+  mid-edit would lose unsaved changes;
+- **Account menu (initials) → Check for updates** does it on demand: it compares the page's script
+  with the live site's and, if they differ and the automatic route is stuck, clears the saved copy
+  of the app and reloads. It never unregisters the service worker — doing that would also cancel
+  that device's push reminders.
+
+The version number (bottom-right of every page) is the quickest way to tell which copy a device is
+running. A phone on a version from before this existed (v56 or earlier) has none of the above: close
+the app completely and reopen it twice, or delete the icon and add it to the Home Screen again.
+
+---
+
 ## Cron reminder timing
 
 Edit `.github/workflows/remind.yml` to change when reminders fire. Uses UTC cron syntax.
