@@ -130,6 +130,12 @@ export function startApp({ transport, who }) {
   const todayNZ = () => { const d = new Date(); return `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
   const noteText = () => `EST and PVT completed - ${todayNZ()}`;
   const plainNotes = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
+  // Everything ending up attached when the job closes (new this run, plus
+  // already-attached from an earlier run) - one line per asset, model
+  // omitted (just the serial) for a sheet with no "Model" column.
+  const assetListHtml = jp => jp.attach.concat(jp.already)
+    .map(a => esc(a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`))
+    .map(s => `<div>${s}</div>`).join('');
   const ccPath = (p, jp) => `/companies/${p.cid}/jobs/${jp.jobNo}/sections/${jp.cc.sec}/costCenters/${jp.cc.id}/assets/`;
   async function planJobs(p) {
     p.jobPlans = [];
@@ -276,7 +282,7 @@ export function startApp({ transport, who }) {
     const p = plan; let html = '';
     if (k === 'create') html = p.creates.map(c => `<details class="asset"><summary><b>${esc(c.ser)}</b> <span class="muted">row ${c.rownum} · site ${esc(c.site)} · ${c.changes.length} fields</span>${c.newId ? ` <span class="pill ok">created ${c.newId}</span>` : ''}${c.error ? ` <span class="pill bad">error</span>` : ''}</summary>${table(['Field', 'Value'], c.changes.map(x => [esc(x.col), esc(x.nv)]))}</details>`).join('') || '<p class="empty">No new assets.</p>';
     if (k === 'update') html = table(['Serial', 'Row', 'Asset', 'Field', 'Simpro now', 'Spreadsheet', ''], p.changes.flatMap(c => c.changes.map(x => [esc(c.ser), c.rownum, c.id, esc(x.col), `<span class="old">${esc(x.old) || '<i>blank</i>'}</span>`, `<span class="new">${esc(x.nv)}</span>`, x.status === 'ok' ? '<span class="pill ok">done</span>' : x.status ? '<span class="pill bad">failed</span>' : ''])));
-    if (k === 'jobs') html = '<p class="muted">After the assets are imported, each job below gets its assets attached, then the note <b>' + esc(noteText()) + '</b> is added to the job Notes, its stage is set to <b>Complete</b> and status to <b>Job : Completed</b>. A job is only completed if every one of its assets attached successfully.</p>' +
+    if (k === 'jobs') html = '<p class="muted">After the assets are imported, each job below gets its assets attached, then a line per asset (model and serial number) plus the note <b>' + esc(noteText()) + '</b> is added to the job Notes, its stage is set to <b>Complete</b> and status to <b>Job : Completed</b>. A job is only completed if every one of its assets attached successfully.</p>' +
       table(['Job', 'Name / site', 'Now', 'To attach', 'Already attached', 'Notes', ''], p.jobPlans.map(j => [
         `<b>#${esc(j.jobNo)}</b>`,
         j.job ? `${esc(j.job.name)}<br><span class="muted">${esc(j.job.site.Name || '')}</span>` : '',
@@ -340,7 +346,7 @@ export function startApp({ transport, who }) {
         if (jp.result.failed) { errors++; log(`  Job ${jp.jobNo} LEFT OPEN - ${jp.result.failed} asset(s) could not be attached`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
         const note = noteText();
         if (!plainNotes(jp.job.notes).includes(note)) {
-          const newNotes = (jp.job.notes ? jp.job.notes + '\n' : '') + `<div>${note}</div>`;
+          const newNotes = (jp.job.notes ? jp.job.notes + '\n' : '') + assetListHtml(jp) + `<div>${note}</div>`;
           const rn = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Notes: newNotes });
           if (!okStatus(rn)) { errors++; jp.closeError = `notes: ${rn.status} ${brief(rn.data)}`; log(`  ERROR job ${jp.jobNo}: could not add the note - job LEFT OPEN: ${rn.status} ${brief(rn.data)}`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
           jp.noteAdded = note;

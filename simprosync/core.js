@@ -57,6 +57,10 @@ const SyncCore = (() => {
     const changes = [], creates = [], warnings = [], seen = new Set(), jobs = new Map();
     let unchanged = 0;
     const jobKey = Object.keys(recs[0] ? recs[0].r : {}).find(k => k.trim().toLowerCase() === JOB_COL.toLowerCase());
+    // Carried onto each job item below so the job-completion note can record
+    // what was attached (model + serial), not just the serial - absent
+    // entirely (model: '') for a sheet with no "Model" column.
+    const modelKey = Object.keys(mapped).find(k => k.trim().toLowerCase() === 'model');
     for (const { rownum, r } of recs) {
       const site = asText(r[SITE_COL]); const ser = asText(r[MATCH_FIELD]).toUpperCase();
       if (!ser) { warnings.push({ row: rownum, serial: '', msg: 'No serial number - row skipped' }); continue; }
@@ -69,7 +73,7 @@ const SyncCore = (() => {
         const jraw = asText(r[jobKey]).replace(/^#/, '').trim();
         if (jraw) {
           if (!/^\d+$/.test(jraw)) warnings.push({ row: rownum, serial: ser, msg: `Simpro Job '${jraw}' is not a job number - not attached to a job` });
-          else { if (!jobs.has(jraw)) jobs.set(jraw, []); jobs.get(jraw).push({ rownum, site, ser }); }
+          else { if (!jobs.has(jraw)) jobs.set(jraw, []); jobs.get(jraw).push({ rownum, site, ser, model: modelKey ? asText(r[modelKey]) : '' }); }
         }
       }
       const rowChanges = [];
