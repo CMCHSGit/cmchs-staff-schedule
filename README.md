@@ -80,6 +80,35 @@ doesn't exist for your deployment.
 
 ---
 
+## 4b. Importing from the Excel schedule (Admin → Excel)
+
+Fills the schedule from the company workbook, so people who still update the Excel show up
+in the app. The admin chooses the `.xlsx` (e.g. the OneDrive-synced copy); it's read in the
+browser, nothing is uploaded except the resulting entries, and **nothing is written until
+Import is pressed** — the screen shows what would change first.
+
+- **Reading** (`src/utils/excelSchedule.js`): finds each week from the Monday date in the
+  sheet's header (sheet names are inconsistent), and each person from the AM/PM label column, so
+  it copes with both layouts in the file (with and without the team-label column). An AM/PM
+  split becomes one entry ("Waikato / Cass Office"); "Name - OnCall" sets that week's on-call.
+- **People** (`excelPlan.js`): matched by an Excel name set on the person, else full name, else
+  first name *within the same team* (so two people sharing a first name aren't confused).
+  Anyone ambiguous is left for the admin to pick. People on the newest sheet who aren't in the
+  app are added as "not signed in yet" (switchable); people who only appear in old weeks have
+  left, so they aren't.
+- **Safe to run again and again.** Each imported entry remembers what the Excel said
+  (`excelBase`). Next time: an app entry still equal to that is untouched in the app, so a
+  change in the Excel flows in; an app entry that differs was edited in the app, so it's kept;
+  only if both changed is it a conflict — listed, and the app wins unless "use the Excel's" is
+  ticked. A blank Excel cell never clears an app entry.
+- Imported entries don't set `submittedAt` ("saved in the app"), so the Excel copy job
+  (`scripts/sync-excel.mjs`) doesn't write them straight back.
+- Importing past weeks also fills in the **Out of town** report for those weeks.
+- Real staff data never goes in this repo: the screen reads the file you choose, and tests used
+  made-up workbooks.
+
+---
+
 ## 5. Local development
 
 ```bash
