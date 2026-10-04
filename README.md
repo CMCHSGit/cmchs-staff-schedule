@@ -93,9 +93,11 @@ Import is pressed** — the screen shows what would change first.
   split becomes one entry ("Waikato / Cass Office"); "Name - OnCall" sets that week's on-call.
 - **People** (`excelPlan.js`): matched by an Excel name set on the person, else full name, else
   first name *within the same team* (so two people sharing a first name aren't confused).
-  Anyone ambiguous is left for the admin to pick. People on the newest sheet who aren't in the
-  app are added as "not signed in yet" (switchable); people who only appear in old weeks have
-  left, so they aren't.
+  Anyone ambiguous is left for the admin to pick. A *close* name — Mike / Michael, Jess /
+  Jessica, Jo-ann / Joann, Andy / Andrew — is marked **Check** with the likely person offered
+  first in the dropdown: it's never matched on a guess, and never added as a duplicate. People
+  on the newest sheet who aren't in the app at all are added as "not signed in yet"
+  (switchable); people who only appear in old weeks have left, so they aren't.
 - **Safe to run again and again.** Each imported entry remembers what the Excel said
   (`excelBase`). Next time: an app entry still equal to that is untouched in the app, so a
   change in the Excel flows in; an app entry that differs was edited in the app, so it's kept;
@@ -104,8 +106,9 @@ Import is pressed** — the screen shows what would change first.
 - Imported entries don't set `submittedAt` ("saved in the app"), so the Excel copy job
   (`scripts/sync-excel.mjs`) doesn't write them straight back.
 - Importing past weeks also fills in the **Out of town** report for those weeks.
-- Real staff data never goes in this repo: the screen reads the file you choose, and tests used
-  made-up workbooks.
+- Real staff data never goes in this repo: the screen reads the file you choose, and tests use
+  made-up workbooks and names. `npm test` runs them (`tests/excelImport.test.mjs`: reading both
+  sheet layouts, name matching, and the merge rules).
 
 ---
 

@@ -31,10 +31,34 @@ export const nameKey = s => nameTokens(s).join(' ')
 /** The id used for a "not signed in yet" person — the same recipe Admin → Add a person uses. */
 export const placeholderId = name => 'pending-' + String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '')
 
+/** Names compared with hyphens and apostrophes ignored: "Jo-ann" = "Joann". */
+const squish = s => s.replace(/[-']/g, '')
+
+// Short forms where one isn't simply the start of the other (Mike/Michael, Andy/Andrew…).
+// Ones that are (Jess/Jessica, Ben/Benjamin, Sam/Samuel) need no entry here.
+const SHORT_FORMS = [
+  ['mike', 'michael'], ['mick', 'michael'], ['andy', 'andrew'], ['drew', 'andrew'], ['steve', 'stephen'], ['steve', 'steven'],
+  ['dave', 'david'], ['jim', 'james'], ['jimmy', 'james'], ['jamie', 'james'], ['liz', 'elizabeth'], ['beth', 'elizabeth'],
+  ['betty', 'elizabeth'], ['tony', 'anthony'], ['bob', 'robert'], ['bobby', 'robert'], ['bill', 'william'], ['kate', 'catherine'],
+  ['cathy', 'catherine'], ['jacqui', 'jacqueline'], ['jackie', 'jacqueline'], ['jo', 'joanne'], ['becky', 'rebecca'],
+  ['abby', 'abigail'], ['vicky', 'victoria'], ['sue', 'susan'], ['pat', 'patricia'], ['pat', 'patrick'], ['ted', 'edward'],
+  ['ed', 'edward'], ['ned', 'edward'], ['nat', 'nathan'], ['gabe', 'gabriel'], ['harry', 'henry'], ['dick', 'richard'],
+  ['rick', 'richard'], ['rich', 'richard'],
+]
+
+/** Could these be the same first name — equal, one the start of the other (3+ letters), or a known short form? */
+function sameFirstName(a, b) {
+  if (!a || !b) return false
+  if (a === b) return true
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a]
+  if (short.length >= 3 && long.startsWith(short)) return true
+  return SHORT_FORMS.some(([s, l]) => (s === a && l === b) || (s === b && l === a))
+}
+
 function userNameInfo(u) {
   const display = u.displayName || ''
-  const legal = nameTokens(display)
-  const nickname = nameTokens(display.match(/\(([^)]+)\)/)?.[1] || '')
+  const legal = nameTokens(display).map(squish)
+  const nickname = nameTokens(display.match(/\(([^)]+)\)/)?.[1] || '').map(squish)
   return {
     firsts: [...new Set([legal[0], nickname[0]].filter(Boolean))],
     last: legal.length > 1 ? legal[legal.length - 1] : '',
@@ -68,12 +92,15 @@ export function excelPeople(weeksPeople, hints = []) {
 
 /**
  * Which app person is each Excel name? → Map(key → { status, uid?, how?, candidates? })
- * status: 'matched' | 'ambiguous' (several fit) | 'none'.
+ * status: 'matched' | 'ambiguous' (several fit) | 'maybe' (close but not certain) | 'none'.
  * Most specific rule first, and nobody is matched twice:
  *   1. an Excel name an admin already set on the person,
  *   2. first + last name ("Sam Reed"),
  *   3. first name alone ("Sam") — only among people on the same team, so one
- *      Sam is never mistaken for another with the same first name.
+ *      Sam is never mistaken for another with the same first name,
+ *   4. a close first name ("Mike" / "Michael Fox", "Jess Reed" / "Jessica Reed"):
+ *      only ever a *suggestion* for the admin to confirm — a wrong guess would
+ *      put someone's whereabouts on the wrong person.
  */
 export function matchPeople(people, users) {
   const info = new Map(users.map(u => [u.uid, userNameInfo(u)]))
@@ -88,7 +115,7 @@ export function matchPeople(people, users) {
 
   for (const p of people) {
     if (result.has(p.key)) continue
-    const t = nameTokens(p.name)
+    const t = nameTokens(p.name).map(squish)
     if (t.length < 2) continue
     const hits = users.filter(u => !taken.has(u.uid) && info.get(u.uid).last === t[t.length - 1] && info.get(u.uid).firsts.includes(t[0]))
     if (hits.length === 1) claim(p, hits[0].uid, 'full name')
@@ -97,12 +124,23 @@ export function matchPeople(people, users) {
 
   for (const p of people) {
     if (result.has(p.key)) continue
-    const t = nameTokens(p.name)
+    const t = nameTokens(p.name).map(squish)
     if (t.length !== 1) continue
     let hits = users.filter(u => !taken.has(u.uid) && info.get(u.uid).firsts.includes(t[0]))
     if (p.team) hits = hits.filter(u => !u.team || u.team === p.team)
     if (hits.length === 1) claim(p, hits[0].uid, 'first name')
     else if (hits.length > 1) result.set(p.key, { status: 'ambiguous', candidates: hits.map(h => h.uid) })
+  }
+
+  for (const p of people) {
+    if (result.has(p.key)) continue
+    const t = nameTokens(p.name).map(squish)
+    if (!t.length) continue
+    const last = t.length > 1 ? t[t.length - 1] : ''
+    let hits = users.filter(u => !taken.has(u.uid) && info.get(u.uid).firsts.some(f => sameFirstName(f, t[0])))
+    if (last) hits = hits.filter(u => info.get(u.uid).last === last) // a full Excel name must agree on the surname
+    else if (p.team) hits = hits.filter(u => !u.team || u.team === p.team)
+    if (hits.length) result.set(p.key, { status: 'maybe', candidates: hits.map(h => h.uid) })
   }
 
   for (const p of people) if (!result.has(p.key)) result.set(p.key, { status: 'none' })

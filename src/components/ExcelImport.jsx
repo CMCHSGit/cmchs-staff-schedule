@@ -112,11 +112,14 @@ export default function ExcelImport() {
 
   const matchedCount = people.filter(p => mapping.get(p.key)?.kind === 'user').length
   const newCount = people.filter(p => mapping.get(p.key)?.kind === 'new').length
-  const needChoice = people.filter(p => matching.get(p.key)?.status === 'ambiguous' && !overrides[p.key]).length
+  const needsChoice = p => ['ambiguous', 'maybe'].includes(matching.get(p.key)?.status) && !overrides[p.key]
+  const needChoice = people.filter(needsChoice).length
   const rows = [...people].sort((a, b) => {
-    const rank = p => ({ ambiguous: 0, none: 1, matched: 2 })[matching.get(p.key)?.status] ?? 3
+    const rank = p => ({ ambiguous: 0, maybe: 0, none: 1, matched: 2 })[matching.get(p.key)?.status] ?? 3
     return rank(a) - rank(b) || a.name.localeCompare(b.name)
   })
+  const usersById = useMemo(() => new Map(users.map(u => [u.uid, u])), [users])
+  const userLabel = u => `${u.displayName || names.get(u.uid)}${u.pending ? ' — not signed in yet' : ''}`
   const sortedUsers = useMemo(() => [...users].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || '')), [users])
   const hasWork = !!plan && (plan.schedules.length > 0 || plan.onCall.length > 0 || plan.newPeople.size > 0 || plan.userUpdates.size > 0)
 
@@ -224,7 +227,7 @@ export default function ExcelImport() {
               <p className="text-sm text-muted">
                 Each name in the Excel is matched to someone in the app by name and team. Check the list and change any that are wrong:
                 {' '}{matchedCount} matched, {newCount} will be added as new people
-                {needChoice > 0 && <strong>, {needChoice} need you to choose who they are</strong>}.
+                {needChoice > 0 && <strong>, {needChoice} marked Check or Several fit need you to choose who they are</strong>}.
                 {people.some(p => !currentKeys.has(p.key)) && ' People who only appear in older weeks have left, so they’re not added.'}
               </p>
               <Switch checked={addNew} onChange={setAddNew} label="Add people who aren’t in the app yet (shown as “not signed in yet” until they sign in)" />
@@ -232,6 +235,7 @@ export default function ExcelImport() {
                 {rows.map(p => {
                   const status = matching.get(p.key)?.status
                   const chosen = overrides[p.key]
+                  const candidates = (matching.get(p.key)?.candidates || []).map(uid => usersById.get(uid)).filter(Boolean)
                   return (
                     <div className="excel-person" role="row" key={p.key}>
                       <span role="cell" className="excel-person-name">
@@ -240,15 +244,23 @@ export default function ExcelImport() {
                       </span>
                       <span role="cell">
                         <select value={selectValue(p.key)} onChange={e => setOverrides(o => ({ ...o, [p.key]: e.target.value }))} aria-label={`Who is ${p.name}?`}>
+                          {candidates.length > 0 && (
+                            <optgroup label="Possible matches">
+                              {candidates.map(u => <option key={`maybe-${u.uid}`} value={u.uid}>{userLabel(u)}</option>)}
+                            </optgroup>
+                          )}
                           <option value="new">Add as a new person</option>
                           <option value="skip">Don’t import</option>
-                          {sortedUsers.map(u => <option key={u.uid} value={u.uid}>{u.displayName || names.get(u.uid)}{u.pending ? ' — not signed in yet' : ''}</option>)}
+                          <optgroup label="Everyone in the app">
+                            {sortedUsers.map(u => <option key={u.uid} value={u.uid}>{userLabel(u)}</option>)}
+                          </optgroup>
                         </select>
                       </span>
                       <span role="cell" className="excel-person-status">
                         {chosen ? <Badge tone="purple">Chosen</Badge>
                           : status === 'matched' ? <Badge tone="green">Matched</Badge>
                           : status === 'ambiguous' ? <Badge tone="orange">Several fit</Badge>
+                          : status === 'maybe' ? <Badge tone="orange">Check</Badge>
                           : currentKeys.has(p.key) ? <Badge tone="neutral">Not in the app</Badge>
                           : <Badge tone="neutral">No longer on the sheet</Badge>}
                       </span>
@@ -271,6 +283,14 @@ export default function ExcelImport() {
                     <div><strong>{plan.newPeople.size.toLocaleString('en-NZ')}</strong><span>new people</span></div>
                     <div><strong>{plan.onCall.length.toLocaleString('en-NZ')}</strong><span>on-call weeks set</span></div>
                   </div>
+
+                  {plan.newPeople.size > 0 && (
+                    <p className="text-sm text-muted">
+                      Will be added as new people: <strong>{[...plan.newPeople.values()].slice(0, 12).map(n => n.displayName).join(', ')}</strong>
+                      {plan.newPeople.size > 12 && ` and ${plan.newPeople.size - 12} more`}. If any of them is already in the app under another
+                      name (Mike / Michael, say), choose them in the People list above instead, so they aren’t added twice.
+                    </p>
+                  )}
 
                   {plan.warnings.length > 0 && <Alert tone="warning" icon={<TriangleAlert size={20} />} title="Worth a look">{plan.warnings.slice(0, 5).join(' ')}</Alert>}
 
