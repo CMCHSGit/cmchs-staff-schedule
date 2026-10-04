@@ -132,10 +132,15 @@ export function startApp({ transport, who }) {
   const plainNotes = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
   // Everything ending up attached when the job closes (new this run, plus
   // already-attached from an earlier run) - one line per asset, model
-  // omitted (just the serial) for a sheet with no "Model" column.
-  const assetListHtml = jp => jp.attach.concat(jp.already)
-    .map(a => esc(a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`))
-    .map(s => `<div>${s}</div>`).join('');
+  // omitted (just the serial) for a sheet with no "Model" column. One <div>
+  // with <br> between items, not a <div> per item - matches the single
+  // <div> the "EST and PVT completed" note already uses below, and
+  // guarantees an actual line break per item regardless of how Simpro's
+  // notes editor handles adjacent top-level block elements.
+  const assetListHtml = jp => {
+    const items = jp.attach.concat(jp.already).map(a => esc(a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`));
+    return items.length ? `<div>${items.join('<br>')}</div>` : '';
+  };
   const ccPath = (p, jp) => `/companies/${p.cid}/jobs/${jp.jobNo}/sections/${jp.cc.sec}/costCenters/${jp.cc.id}/assets/`;
   async function planJobs(p) {
     p.jobPlans = [];
