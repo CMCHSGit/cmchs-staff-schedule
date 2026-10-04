@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Printer, Copy, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { getCurrentWeekStart, addDaysISO, weekDates, weekLabel, fromISO, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, dayMonth } from '../utils/week'
+import { getCurrentWeekStart, addDaysISO, weekDates, weekLabel, fromISO, todayIndex, normalizeSchedule, daysWithCalls, WEEK_DAYS, DAY_SHORT, dayMonth } from '../utils/week'
 import { holidayOn } from '../utils/holidays'
 import { describeDay, INK } from '../utils/status'
 import { groupByTeam } from '../utils/teams'
@@ -21,6 +21,8 @@ import EditDrawer from '../components/EditDrawer'
 import CommentDrawer from '../components/CommentDrawer'
 import Toast, { useToast } from '../components/Toast'
 import { Button, Loading } from '../components/ui'
+
+const PHONE_VIEW_KEY = 'css_team_phone_view'
 
 export default function TeamWeek() {
   const { user, profile } = useAuth()
@@ -42,6 +44,15 @@ export default function TeamWeek() {
   const [editing, setEditing] = useState(null) // { uid, dayIdx }
   const [commenting, setCommenting] = useState(null) // uid
   const [copying, setCopying] = useState(false)
+  // Phones: 'day' (one day per person, picked with the day pills) or 'week'
+  // (everyone's whole week, swiped sideways). Remembered on the device.
+  const [phoneView, setPhoneView] = useState(() => {
+    try { return localStorage.getItem(PHONE_VIEW_KEY) === 'week' ? 'week' : 'day' } catch { return 'day' }
+  })
+  function choosePhoneView(v) {
+    setPhoneView(v)
+    try { localStorage.setItem(PHONE_VIEW_KEY, v) } catch { /* private mode — just not remembered */ }
+  }
   const [toast, showToast] = useToast()
 
   const { users, loading: usersLoading } = useUsers()
@@ -281,9 +292,18 @@ export default function TeamWeek() {
 
       <PeopleFilter query={query} onQuery={setQuery} teams={teamOptions} selected={teamSel} onChange={setTeamSel} />
 
-      <div className="show-narrow"><DayPills weekStart={weekStart} value={dayIdx} onChange={setDayIdx} /></div>
+      <div className="show-narrow phone-view-switch" role="tablist" aria-label="Show">
+        {[['day', 'Day'], ['week', 'Week']].map(([v, label]) => (
+          <button key={v} type="button" role="tab" aria-selected={phoneView === v} className={phoneView === v ? 'active' : ''} onClick={() => choosePhoneView(v)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {phoneView === 'day' && <div className="show-narrow"><DayPills weekStart={weekStart} value={dayIdx} onChange={setDayIdx} /></div>}
 
-      <LeavePin weekStart={weekStart} dayIdx={dayIdx} people={leaveToday} names={names} />
+      <div className={phoneView === 'week' ? 'hide-narrow' : undefined}>
+        <LeavePin weekStart={weekStart} dayIdx={dayIdx} people={leaveToday} names={names} />
+      </div>
       <div className="hide-narrow"><Legend /></div>
 
       {loading ? <Loading /> : (
@@ -358,7 +378,54 @@ export default function TeamWeek() {
             ))}
           </div>
 
-          {/* Phone: one day at a time, picked with the day pills */}
+          {/* Phone, Week: everyone's whole week in one table that swipes
+              sideways, names pinned on the left — full text, no initials. */}
+          {phoneView === 'week' && (
+            <div className="wk-mobile">
+              <div className="wkw-scroll">
+                <div className="wkw-table">
+                  <div className="wkw-row wkw-head">
+                    <span className="wkw-name">Name</span>
+                    {WEEK_DAYS.map((d, i) => (
+                      <span key={d} className={`wkw-cell${i === today ? ' today' : ''}`}>{DAY_SHORT[i]} {dayMonth(dates[i])}</span>
+                    ))}
+                    <span className="wkw-note" />
+                  </div>
+                  {groups.map(g => (
+                    <div key={g.team} className="wkw-group">
+                      <div className="wkw-band" style={{ background: g.band }}><span>{g.label}</span></div>
+                      {g.members.map(u => {
+                        const Tagname = canEdit(u) ? 'button' : 'div'
+                        return (
+                          <div key={u.uid} className="wkw-row" data-uid={u.uid}>
+                            <Tagname
+                              type={canEdit(u) ? 'button' : undefined}
+                              className="wkw-main"
+                              onClick={canEdit(u) ? () => setEditing({ uid: u.uid, dayIdx: Math.max(0, today) }) : undefined}
+                            >
+                              <span className={`wkw-name${oncall?.uid === u.uid ? ' oncall' : ''}`}>{nameLabel(u)}</span>
+                              {WEEK_DAYS.map((_, i) => {
+                                const c = cell(u, i)
+                                return (
+                                  <span key={i} className={`wkw-cell${c.empty ? ' blank' : ''}`} style={{ background: c.bg, ...(c.filled && { color: INK }) }}>
+                                    {c.text || '—'}
+                                  </span>
+                                )
+                              })}
+                            </Tagname>
+                            <span className="wkw-note">{commentButton(u)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Phone, Day: one day at a time, picked with the day pills */}
+          {phoneView === 'day' && (
           <div className="wk-mobile">
             {groups.map(g => (
               <div key={g.team} className="wkm-group">
@@ -386,6 +453,7 @@ export default function TeamWeek() {
               </div>
             ))}
           </div>
+          )}
         </>
       )}
 

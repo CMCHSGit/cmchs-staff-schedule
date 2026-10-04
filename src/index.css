@@ -77,6 +77,44 @@
 .account-name { font: var(--type-body-strong); color: var(--text-strong); overflow-wrap: anywhere; }
 .account-detail { font: var(--type-body-sm); color: var(--text-muted); overflow-wrap: anywhere; }
 .account-panel .btn { margin-top: 10px; }
+.account-link, .account-action { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 0 2px; background: none; border: none; text-align: left; cursor: pointer; font: var(--weight-semibold) 14px/1.3 var(--font-body); color: var(--accent-fg); }
+.account-link { margin-top: 10px; border-top: 1px solid var(--border-subtle); }
+.account-action:disabled { opacity: .6; cursor: default; }
+
+/* "A new version is ready" — sits above the phone's bottom bar, below any open panel. */
+.update-banner {
+  position: fixed; z-index: 40; left: 12px; right: 12px;
+  bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px;
+  background: var(--surface-brand-tint); color: var(--accent-fg);
+  border: 1px solid var(--chs-purple-30); border-radius: var(--radius-md); box-shadow: var(--shadow-overlay);
+  font: var(--type-body-strong);
+  animation: toast-in var(--duration-base) var(--ease-out);
+}
+.update-banner span { flex: 1; }
+@media (min-width: 760px) { .update-banner { right: auto; left: 16px; bottom: 16px; max-width: 380px; } }
+@media print { .update-banner { display: none; } }
+
+/* Out-of-town report */
+.oot-page { max-width: 1000px; }
+.oot-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; }
+.oot-controls .field { min-width: 180px; }
+.oot-controls .switch { padding-bottom: 10px; }
+.oot-download { margin-left: auto; }
+.oot-table { overflow: hidden; }
+.oot-row { display: grid; grid-template-columns: 130px 84px minmax(0, 1fr); gap: 12px; align-items: center; padding: 6px 16px; border-top: 1px solid var(--border-subtle); }
+.oot-row .input { padding-top: 7px; padding-bottom: 7px; }
+.oot-head { border-top: none; background: var(--surface-subtle); padding-top: 10px; padding-bottom: 10px; }
+.oot-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
+.oot-week { font: var(--weight-semibold) 15px/1.3 var(--font-body); color: var(--text-strong); display: flex; flex-direction: column; }
+.oot-edited { font: var(--type-caption); color: var(--accent-fg); }
+.oot-zero .oot-week { color: var(--text-muted); font-weight: 400; }
+.oot-days { text-align: center; }
+.oot-total { background: var(--surface-brand-tint); font: var(--type-body-strong); color: var(--text-strong); padding-top: 12px; padding-bottom: 12px; }
+@media (max-width: 759.98px) {
+  .oot-row { grid-template-columns: 92px 64px minmax(0, 1fr); gap: 8px; padding: 6px 10px; }
+  .oot-download { margin-left: 0; width: 100%; }
+}
 
 html, body, #root { min-height: 100%; }
 body {
@@ -538,6 +576,41 @@ button.wkm-main { cursor: pointer; }
 .wkm-name.oncall .wk-name-avatar { background: var(--ink); color: #FF7C80; }
 .wkm-day { display: flex; align-items: center; padding: 6px 12px; border-left: 1px dashed var(--chs-black-40); font: var(--weight-regular) 14px/1.3 var(--font-body); color: var(--text-strong); }
 .wkm-day.blank { color: var(--text-disabled); }
+
+/* Phone: Day | Week switch, and the Week table — one horizontal scroller for
+   every team, so all rows slide together; names stay pinned on the left. */
+.phone-view-switch { display: inline-grid; grid-template-columns: 1fr 1fr; align-self: flex-start; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-subtle); border: 1px solid var(--border-subtle); }
+.phone-view-switch button { border: none; background: none; padding: 6px 22px; border-radius: var(--radius-pill); font: var(--weight-semibold) 14px/1.2 var(--font-body); color: var(--text-muted); cursor: pointer; }
+.phone-view-switch button.active { background: var(--chs-purple); color: #fff; }
+.wkw-scroll { overflow-x: auto; border: 1px solid var(--border-hairline); border-radius: var(--radius-card); -webkit-overflow-scrolling: touch; }
+.wkw-table { width: max-content; min-width: 100%; }
+.wkw-row { display: flex; align-items: stretch; border-top: 1px solid var(--border-subtle); }
+.wkw-group > .wkw-row:first-of-type { border-top: none; }
+.wkw-main { display: flex; align-items: stretch; border: none; background: none; padding: 0; text-align: left; color: inherit; font: inherit; }
+button.wkw-main { cursor: pointer; }
+.wkw-name {
+  position: sticky; left: 0; z-index: 1; flex: 0 0 104px; width: 104px;
+  display: flex; align-items: center; padding: 6px 10px;
+  background: var(--surface-card); border-right: 1px solid var(--border-hairline);
+  font: var(--weight-regular) 14px/1.25 var(--font-body); color: var(--text-strong);
+}
+.wkw-name.oncall { background: #FF7C80; color: var(--ink); font-weight: 600; }
+.wkw-cell {
+  flex: 0 0 124px; width: 124px; min-height: 48px; display: flex; align-items: center;
+  padding: 6px 8px; border-left: 1px dashed var(--chs-black-40);
+  font: var(--weight-regular) 13px/1.3 var(--font-body); color: var(--text-strong);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+}
+.wkw-cell.blank { color: var(--text-disabled); }
+.wkw-name + .wkw-cell { border-left: none; }
+.wkw-note { flex: 0 0 44px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--border-subtle); }
+.wkw-head { background: var(--surface-subtle); border-top: none; }
+.wkw-head .wkw-name { background: var(--surface-subtle); }
+.wkw-head .wkw-name, .wkw-head .wkw-cell { min-height: 0; padding-top: 8px; padding-bottom: 8px; font: var(--type-overline); letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); display: flex; }
+.wkw-head .wkw-cell.today { color: var(--accent-fg); }
+.wkw-band { border-top: 1px solid var(--border-hairline); }
+.wkw-band span { position: sticky; left: 0; display: inline-block; padding: 6px 12px; font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--ink); }
+.wkw-group:first-of-type .wkw-band { border-top: none; }
 
 /* ════════════════════════════════════════════════════════════════════
    Day view

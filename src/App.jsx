@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
-import { CalendarCheck, CalendarDays, MapPin, CalendarRange, Phone, Settings, Moon, Sun } from 'lucide-react'
+import { CalendarCheck, CalendarDays, MapPin, CalendarRange, Phone, Settings, Moon, Sun, Plane } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login         from './pages/Login'
 import MySchedule    from './pages/MySchedule'
@@ -9,9 +9,11 @@ import DayView       from './pages/DayView'
 import LeaveCalendar from './pages/LeaveCalendar'
 import OnCall        from './pages/OnCall'
 import Admin         from './pages/Admin'
+import OutOfTown     from './pages/OutOfTown'
 import TeamOnboarding from './components/TeamOnboarding'
 import PullToRefresh  from './components/PullToRefresh'
 import AccountMenu    from './components/AccountMenu'
+import UpdateBanner   from './components/UpdateBanner'
 import { Logo, StripeRule, Spinner, IconButton } from './components/ui'
 import { useTheme } from './utils/theme'
 import { APP_VERSION } from './version'
@@ -25,6 +27,9 @@ const VIEWS = [
   { to: '/day',    label: 'Day',       tab: 'Day',            Icon: MapPin },
   { to: '/leave',  label: 'Leave',     tab: 'Leave calendar', Icon: CalendarRange },
   { to: '/oncall', label: 'On call',   tab: 'On call',        Icon: Phone },
+  // Desktop tab only — the phone's bottom bar is full, so phones reach it
+  // from the account menu instead (it's mostly a download-and-email job).
+  { to: '/out-of-town', label: 'Out of town', tab: 'Out of town', Icon: Plane, desktopOnly: true },
 ]
 
 export default function App() {
@@ -33,6 +38,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
+      <UpdateBanner />
     </AuthProvider>
   )
 }
@@ -73,6 +79,7 @@ function AppRoutes() {
           <Route path="/leave"  element={<LeaveCalendar />} />
           <Route path="/oncall" element={<OnCall />} />
           <Route path="/admin"  element={<Admin />} />
+          <Route path="/out-of-town" element={<OutOfTown />} />
           {/* /team was Team week's path before it became the default — kept
               working for anyone's old bookmark or home-screen shortcut. */}
           <Route path="/team"   element={<Navigate to="/" replace />} />
@@ -127,7 +134,7 @@ function AppHeader() {
 function BottomNav() {
   return (
     <nav className="bottom-nav" aria-label="Views">
-      {VIEWS.map(({ to, label, Icon }) => (
+      {VIEWS.filter(v => !v.desktopOnly).map(({ to, label, Icon }) => (
         <NavLink key={to} to={to} end className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <Icon size={22} aria-hidden="true" />
           <span>{label}</span>
