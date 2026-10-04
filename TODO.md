@@ -43,6 +43,28 @@ no longer one day at a time).
       fails silently in the background, per-action, the same way the Excel mirror does), but
       the log itself stays empty and Admin → Activity log shows a banner saying so.
 
+## Excel → app (built 2026-10-05; the automatic part needs IT)
+
+**Admin → Excel** imports from the workbook on demand (see README §4b). Run it whenever the
+Excel has changed. Everything below is about making it automatic.
+
+- [ ] **#32** **Automatic Excel → app link, every 15 minutes.** Needs IT to let the app *read*
+      the workbook from Microsoft: an Entra ID admin consent for `Files.Read.All`, or the
+      narrower `Sites.Selected` (read) granted on that one SharePoint site only. Read-only is
+      enough for this direction, so it's an easier ask than the read/write one in #18. Then
+      the existing `scripts/sync-excel.mjs` job can download the workbook (`GET .../content`),
+      read it with `src/utils/excelSchedule.js` and merge it with `src/utils/excelPlan.js` —
+      the same code the Admin screen uses — and, if write access is granted too, copy app
+      changes back using the same remembered-values (`excelBase`) idea, so neither side
+      overwrites the other. Alternative with no IT involvement: run that job from your PC on a
+      Windows schedule against the OneDrive-synced file (needs the PC on, and a Firebase
+      service-account key kept on it).
+- [ ] **#33** The Excel's `19-Aug-24` tab has the wrong week typed in its header (it repeats the
+      week before), so it's skipped when importing history. Fix the date in the Excel if that week matters.
+- [ ] **#34** Known gap: when a "not signed in yet" person signs in, their schedules move across
+      but on-call / customer-calls assignments pointing at the placeholder don't (those can only be
+      changed by an admin). The On-call page still shows the name; re-pick them there if it matters.
+
 ## Move off Vercel to GitHub only (live on GitHub Pages since 2026-09-29)
 
 Code is done (`.github/workflows/`, `scripts/`); these are the setup steps.

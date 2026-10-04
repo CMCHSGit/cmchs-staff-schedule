@@ -785,6 +785,30 @@ button.wkw-main { cursor: pointer; }
 
 .admin-lock { max-width: 380px; margin: 40px auto 0; padding: 28px 24px; display: flex; flex-direction: column; gap: 12px; align-items: stretch; text-align: center; }
 .admin-lock-icon { align-self: center; color: var(--accent-fg); }
+.excel-pick { align-self: flex-start; cursor: pointer; }
+.excel-pick.is-disabled { opacity: .5; cursor: default; pointer-events: none; }
+.excel-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; color: var(--text-muted); text-align: center; }
+.excel-section { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; }
+.excel-heading { font: var(--type-h4); color: var(--text-strong); }
+.excel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.excel-row select { width: auto; min-width: 240px; }
+.excel-people { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); max-height: 420px; overflow-y: auto; }
+.excel-person { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(180px, 1.4fr) auto; gap: 12px; align-items: center; padding: 6px 12px; border-top: 1px solid var(--border-subtle); }
+.excel-person:first-child { border-top: none; }
+.excel-person select { padding-top: 6px; padding-bottom: 6px; }
+.excel-person-name { font: var(--type-body-strong); color: var(--text-strong); display: flex; flex-direction: column; }
+.excel-person-status { min-width: 110px; text-align: right; }
+.excel-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.excel-stats > div { display: flex; flex-direction: column; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-subtle); }
+.excel-stats strong { font: var(--weight-semibold) 22px/1.2 var(--font-display); color: var(--text-strong); }
+.excel-stats span { font: var(--type-caption); color: var(--text-muted); }
+.excel-details { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; }
+.excel-details summary { cursor: pointer; font: var(--weight-semibold) 14px/1.4 var(--font-body); color: var(--text-strong); }
+.excel-details ul { margin: 8px 0 0 18px; display: flex; flex-direction: column; gap: 4px; font: var(--type-body-sm); color: var(--text-body); }
+.excel-weeks { margin-top: 8px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
+.excel-weeks > div { display: grid; grid-template-columns: 1.2fr 1fr .7fr .8fr; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border-subtle); font: var(--type-body-sm); color: var(--text-body); }
+.excel-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+@media (max-width: 759.98px) { .excel-person { grid-template-columns: 1fr; gap: 4px; } .excel-person-status { text-align: left; } }
 .version-note { text-align: center; font: var(--type-caption); color: var(--text-muted); padding: 8px 0 16px; }
 code { font-family: var(--font-mono); font-size: .92em; }
 

@@ -10,6 +10,7 @@ import Toast from '../components/Toast'
 import { TEAMS, teamLabel } from '../utils/teams'
 import { logActivity } from '../utils/activityLog'
 import { Alert, Badge, Button, Loading } from '../components/ui'
+import ExcelImport from '../components/ExcelImport'
 import { APP_VERSION } from '../version'
 
 /**
@@ -89,7 +90,7 @@ export default function Admin() {
       <h1 className="page-title">Admin</h1>
 
       <div className="tabs" role="tablist">
-        {[['locations', 'Locations'], ['users', 'People'], ['activity', 'Activity log']].map(([t, label]) => (
+        {[['locations', 'Locations'], ['users', 'People'], ['excel', 'Excel'], ['activity', 'Activity log']].map(([t, label]) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} className={`tab${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>
             {label}
           </button>
@@ -98,6 +99,7 @@ export default function Admin() {
 
       {tab === 'locations' && <LocationsTab />}
       {tab === 'users'     && <UsersTab />}
+      {tab === 'excel'     && <ExcelImport />}
       {tab === 'activity'  && <ActivityTab />}
 
       <p className="version-note">CMCHS Staff Schedule v{APP_VERSION}</p>
