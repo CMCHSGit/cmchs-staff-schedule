@@ -83,24 +83,30 @@ export function useAppUpdates() {
 }
 
 // ── "Check for updates" ───────────────────────────────────────────────────
-// Compares the script this page is running with the one the live site hands
+// Compares the entry script this page is running with the one the live site hands
 // out right now — a check that doesn't depend on the service worker at all.
 
-const SCRIPT = /\/assets\/index-[\w-]+\.js/
+/**
+ * The page's own entry script — the <script type="module" src="…"> Vite writes
+ * into index.html (its name carries a hash, and the name itself can change
+ * with the build setup, so it's found by what it is rather than what it's called).
+ */
+const moduleScriptSrc = tags => tags.find(tag => /\stype=["']module["']/i.test(tag) && /\ssrc=["']/i.test(tag))?.match(/\ssrc=["']([^"']+)["']/i)?.[1] ?? null
 
 function runningScript() {
-  const el = [...document.scripts].find(s => SCRIPT.test(s.src))
-  return el ? new URL(el.src).pathname : null
+  const el = document.querySelector('script[type="module"][src]')
+  return el ? new URL(el.getAttribute('src'), window.location.href).pathname : null
 }
 
-/** The live site's current script, null if it has none, undefined if it couldn't be reached. */
+/** The live site's current entry script, null if it has none, undefined if it couldn't be reached. */
 async function liveScript() {
   try {
     // The query string keeps this out of the service worker's saved copy of the
     // page, and no-store skips the browser's own — so it's the real current file.
     const res = await fetch(`/index.html?check=${Date.now()}`, { cache: 'no-store' })
     if (!res.ok) return undefined
-    return (await res.text()).match(SCRIPT)?.[0] ?? null
+    const src = moduleScriptSrc((await res.text()).match(/<script\s[^>]*>/gi) || [])
+    return src ? new URL(src, window.location.href).pathname : null
   } catch {
     return undefined
   }
