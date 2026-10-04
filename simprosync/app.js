@@ -1,0 +1,393 @@
+/* ---------- Simpro Asset Sync - page logic ----------
+   Started by main.js once an admin has signed in. Every Simpro call goes
+   through main.js's transport(), which relays it via chs-equipment's Apps
+   Script proxy - this file never sees a Simpro key. */
+import { XLSXLite } from './reader.js';
+import { SyncCore } from './core.js';
+
+export function startApp({ transport, who }) {
+  const DEFAULT_COMPANY = 3, DEFAULT_TYPE = 114;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { } }
+  };
+
+  const WHO = who;
+  let book = null, fileName = '', plan = null, logLines = [];
+  let busy = false;
+
+  /* ---------- logging & progress ---------- */
+  function log(msg) { logLines.push(msg); $('log').textContent = logLines.join('\n'); }
+  function progress(text, done, total) {
+    $('progress').hidden = false;
+    $('progText').textContent = text;
+    $('progBar').style.width = total ? Math.round(100 * done / total) + '%' : '100%';
+    $('progBar').classList.toggle('indeterminate', !total);
+  }
+  function progressDone() { $('progress').hidden = true; }
+  function setBusy(b) { busy = b; document.body.classList.toggle('busy', b); updateButtons(); }
+  function showError(msg) { const el = $('error'); el.textContent = msg; el.hidden = !msg; }
+
+  /* ---------- API ---------- */
+  async function call(method, path, body) {
+    for (let a = 0; a < 4; a++) {
+      let r;
+      try {
+        r = await transport(method, path, body);
+      } catch (e) {
+        if (a < 3) { await sleep(2000 * (a + 1)); continue; }
+        return { status: 0, data: 'Network error: ' + e.message };
+      }
+      if ((r.status === 429 || r.status >= 500) && a < 3) { await sleep(4000 * (a + 1)); continue; }
+      return r;
+    }
+  }
+  const brief = d => (typeof d === 'string' ? d : JSON.stringify(d)).slice(0, 400);
+  async function getAll(path) {
+    let out = [], page = 1; const sep = path.includes('?') ? '&' : '?';
+    for (;;) {
+      const { status, data } = await call('GET', `${path}${sep}pageSize=250&page=${page}`);
+      if (status !== 200) throw new Error(`Simpro request failed (${status}) for ${path}: ${brief(data)}`);
+      out = out.concat(data);
+      if (data.length < 250) return out;
+      page++;
+    }
+  }
+  async function pool(items, n, fn, onTick) {
+    let i = 0, done = 0; const res = new Array(items.length);
+    async function worker() { while (i < items.length) { const k = i++; res[k] = await fn(items[k], k); done++; onTick && onTick(done, items.length); } }
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+    return res;
+  }
+
+  /* ---------- setup lists ---------- */
+  async function loadSetup() {
+    try {
+      const { status, data } = await call('GET', '/companies/');
+      if (status === 401 || status === 403) throw new Error('Simpro rejected the request (' + status + '). Ask an admin to check the SIMPRO_API_KEY script property on the proxy.');
+      if (status !== 200) throw new Error('Could not reach Simpro (' + status + '): ' + brief(data));
+      const savedC = +(store.get('simproSync.company') || DEFAULT_COMPANY);
+      $('company').innerHTML = data.filter(c => !/do not use/i.test(c.Name)).map(c => `<option value="${c.ID}" ${c.ID === savedC ? 'selected' : ''}>${esc(c.Name)}</option>`).join('');
+      await loadTypes();
+    } catch (e) { showError(e.message); }
+  }
+  async function loadTypes() {
+    const cid = $('company').value;
+    const types = await getAll(`/companies/${cid}/setup/assetTypes/`);
+    types.sort((a, b) => a.Name.localeCompare(b.Name));
+    $('assetType').innerHTML = types.map(t => `<option value="${t.ID}" ${t.ID === DEFAULT_TYPE ? 'selected' : ''}>${esc(t.Name.trim())}</option>`).join('');
+    autoType();
+  }
+  $('company').onchange = () => { store.set('simproSync.company', $('company').value); loadTypes().catch(e => showError(e.message)); };
+  function autoType() {   // the "IT" sheet goes in as "Mindray IT"
+    if (!book) return;
+    const sheet = $('sheet').value || '';
+    const want = /^\s*IT\s*$/i.test(sheet) ? 'mindray it' : 'mindray';
+    const opt = [...$('assetType').options].find(o => o.textContent.trim().toLowerCase() === want);
+    if (opt) $('assetType').value = opt.value;
+  }
+
+  /* ---------- user name (for the report) ---------- */
+
+
+  /* ---------- file ---------- */
+  async function takeFile(f) {
+    if (!f) return;
+    if (!/\.(xlsx|xlsm|csv)$/i.test(f.name)) { showError('Choose an .xlsx or .csv asset list.'); return; }
+    showError(''); resetResults();
+    try {
+      book = await XLSXLite.read(f); fileName = f.name;
+      $('sheet').innerHTML = book.sheets.map((s, i) => `<option value="${esc(s)}" data-i="${i}">${esc(s)}</option>`).join('');
+      $('fileName').textContent = f.name;
+      $('fileInfo').hidden = false; $('drop').classList.add('has-file');
+      autoType();
+    } catch (e) { book = null; showError('Could not read that file: ' + e.message + ' (if it is open in Excel with unsaved changes, save it first).'); }
+    updateButtons();
+  }
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
+  $('file').onchange = e => { takeFile(e.target.files[0]); e.target.value = ''; };
+  $('sheet').onchange = () => { autoType(); resetResults(); };
+  $('assetType').onchange = resetResults;
+  $('only').oninput = resetResults;
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  function updateButtons() {
+    $('runDry').disabled = busy || !book || !$('assetType').value;
+    $('apply').disabled = busy || !plan || plan.applied || actionCount(plan) === 0;
+  }
+  function resetResults() { plan = null; $('results').hidden = true; updateButtons(); }
+
+  /* ---------- jobs ---------- */
+  const CLOSED_STAGES = ['Complete', 'Invoiced', 'Archived'];
+  const todayNZ = () => { const d = new Date(); return `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
+  const noteText = () => `EST and PVT completed - ${todayNZ()}`;
+  const plainNotes = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
+  const ccPath = (p, jp) => `/companies/${p.cid}/jobs/${jp.jobNo}/sections/${jp.cc.sec}/costCenters/${jp.cc.id}/assets/`;
+  async function planJobs(p) {
+    p.jobPlans = [];
+    if (!p.jobs.size) return;
+    const codes = await getAll(`/companies/${p.cid}/setup/statusCodes/projects/`).catch(() => []);
+    p.completedStatus = codes.find(c => String(c.Name).trim().toLowerCase() === 'job : completed') || null;
+    let i = 0;
+    for (const [jobNo, items] of p.jobs) {
+      progress(`Checking Simpro job ${jobNo}… (${++i} of ${p.jobs.size})`, i, p.jobs.size);
+      const jp = { jobNo, items, problems: [], notes: [], attach: [], already: [] };
+      p.jobPlans.push(jp);
+      const { status, data } = await call('GET', `/companies/${p.cid}/jobs/${jobNo}`);
+      if (status === 404) { jp.problems.push('Job not found in Simpro'); continue; }
+      if (status !== 200) { jp.problems.push(`Could not read the job (${status}): ${brief(data)}`); continue; }
+      jp.job = { name: data.Name || '', site: data.Site || {}, stage: data.Stage || '', status: (data.Status || {}).Name || '', customer: (data.Customer || {}).CompanyName || '', notes: data.Notes || '' };
+      const wrong = items.filter(x => String(x.site) !== String(jp.job.site.ID));
+      if (wrong.length) jp.problems.push(`Job is for site ${jp.job.site.ID} (${jp.job.site.Name}) but ${wrong.length} asset(s) are on site ${[...new Set(wrong.map(x => x.site))].join(', ')} - job left alone`);
+      if (CLOSED_STAGES.includes(jp.job.stage)) jp.problems.push(`Job is already at stage "${jp.job.stage}" - left alone`);
+      if (!p.completedStatus) jp.problems.push('Status "Job : Completed" was not found in Simpro');
+      const ccs = [];
+      for (const sec of await getAll(`/companies/${p.cid}/jobs/${jobNo}/sections/`))
+        for (const c of await getAll(`/companies/${p.cid}/jobs/${jobNo}/sections/${sec.ID}/costCenters/`))
+          ccs.push({ sec: sec.ID, id: c.ID, name: c.Name || (c.CostCenter || {}).Name || String(c.ID) });
+      if (!ccs.length) { jp.problems.push('Job has no cost centre to attach assets to'); continue; }
+      jp.cc = ccs[0];
+      if (ccs.length > 1) jp.notes.push(`Job has ${ccs.length} cost centres - assets go on the first one (${ccs[0].name})`);
+      const attached = new Set();
+      for (const c of ccs) (await getAll(`/companies/${p.cid}/jobs/${jobNo}/sections/${c.sec}/costCenters/${c.id}/assets/`)).forEach(x => attached.add(String((x.Asset || {}).ID)));
+      for (const it of items) {
+        const ex = p.existing.get(`${it.site}|${it.ser}`);
+        if (ex && attached.has(String(ex.id))) jp.already.push(Object.assign({}, it, { assetId: ex.id }));
+        else jp.attach.push(Object.assign({}, it, { assetId: ex ? ex.id : null }));
+      }
+    }
+  }
+  const okJobs = p => (p.jobPlans || []).filter(j => !j.problems.length);
+  const actionCount = p => p.creates.length + p.changes.length + okJobs(p).length;
+
+  /* ---------- dry run ---------- */
+  $('runDry').onclick = async () => {
+    showError(''); resetResults(); logLines = []; setBusy(true);
+    const cid = $('company').value, tid = $('assetType').value;
+    const typeName = $('assetType').selectedOptions[0].textContent;
+    const only = $('only').value.trim() ? new Set($('only').value.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean)) : null;
+    const stamp = new Date();
+    try {
+      log(`DRY RUN | ${fileName} | sheet "${$('sheet').value}" | ${typeName} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : ''));
+      progress('Reading the spreadsheet…');
+      const idx = +$('sheet').selectedOptions[0].dataset.i;
+      const { header, recs } = SyncCore.toRecords(await book.rows(idx));
+      log(`Spreadsheet rows with data: ${recs.length}`);
+
+      progress('Reading the asset type fields from Simpro…');
+      const fields = await getAll(`/companies/${cid}/setup/assetTypes/${tid}/customFields/`);
+      const fdefList = await pool(fields, 4, async f => {
+        const { status, data } = await call('GET', `/companies/${cid}/setup/assetTypes/${tid}/customFields/${f.ID}`);
+        return status === 200 ? data : f;
+      });
+      const fdef = {}; fdefList.forEach(f => { fdef[f.Name.trim().toLowerCase()] = f; });
+      const { mapped, unmapped } = SyncCore.mapColumns(header, fdef);
+      log(`Columns mapped to Simpro fields: ${Object.keys(mapped).length}`);
+      if (unmapped.length) log(`Columns with NO matching Simpro field (ignored): ${unmapped.join(', ')}`);
+      if (!mapped[SyncCore.MATCH_FIELD]) throw new Error(`The sheet has no "${SyncCore.MATCH_FIELD}" column that matches a ${typeName} field in Simpro.`);
+      const serialCf = mapped[SyncCore.MATCH_FIELD].ID;
+
+      const sites = [...new Set(recs.map(x => SyncCore.asText(x.r[SyncCore.SITE_COL])))];
+      const existing = new Map(), dupes = [], simproErrors = [];
+      for (const site of sites) {
+        if (!/^\d+$/.test(site)) { log(`Skipping rows with bad Site ID "${site}"`); continue; }
+        progress(`Finding ${typeName} assets on site ${site}…`);
+        const assets = (await getAll(`/companies/${cid}/sites/${site}/assets/`)).filter(a => String((a.AssetType || {}).ID) === String(tid) && !a.Archived);
+        log(`Site ${site}: ${assets.length} ${typeName} assets in Simpro`);
+        const cfs = await pool(assets, 10, async a => {
+          const { status, data } = await call('GET', `/companies/${cid}/sites/${site}/assets/${a.ID}/customFields/?pageSize=250`);
+          if (status !== 200) { log(`  could not read asset ${a.ID}: ${status}`); return null; }
+          return data;
+        }, (d, t) => progress(`Reading asset details on site ${site}… ${d} of ${t}`, d, t));
+        assets.forEach((a, i) => {
+          if (!cfs[i]) return;
+          const values = {}; cfs[i].forEach(c => { values[c.CustomField.ID] = c.Value; });
+          const ser = String(values[serialCf] ?? '').trim().toUpperCase();
+          for (const c of cfs[i]) if (c.Value !== null && SyncCore.isErr(c.Value)) simproErrors.push({ site, ser, id: a.ID, field: c.CustomField.Name, value: c.Value });
+          if (!ser) return;
+          const k = `${site}|${ser}`;
+          if (existing.has(k)) dupes.push({ site, ser, a: existing.get(k).id, b: a.ID });
+          else existing.set(k, { id: a.ID, values });
+        });
+      }
+      dupes.forEach(d => log(`WARNING duplicate serial in Simpro: site ${d.site} serial ${d.ser} assets ${d.a} and ${d.b} (first one used)`));
+
+      const res = SyncCore.compare(recs, mapped, existing, only);
+      plan = Object.assign(res, { cid, tid, typeName, stamp, dupes, simproErrors, unmapped, fileName, applied: false, existing });
+      await planJobs(plan);
+      log(`\nTo create: ${res.creates.length}   To update: ${res.changes.length} (${res.changes.reduce((n, c) => n + c.changes.length, 0)} field changes)   Unchanged: ${res.unchanged}`);
+      log(`In Simpro but not in sheet (left alone): ${res.simproOnly.length}`);
+      if (plan.jobPlans.length) {
+        log(`Jobs: ${plan.jobPlans.length} (${okJobs(plan).length} will have assets attached and be completed)`);
+        plan.jobPlans.forEach(j => log(`  Job ${j.jobNo}: attach ${j.attach.length}, already attached ${j.already.length}` + (j.problems.length ? ' - NOT CHANGED: ' + j.problems.join('; ') : ` - then note "${noteText()}", Stage Complete, Status "Job : Completed"`) + (j.notes.length ? ' (' + j.notes.join('; ') + ')' : '')));
+      }
+      log(`Warnings: ${res.warnings.length}`);
+      res.warnings.forEach(w => log(`  Row ${w.row} ${w.serial}: ${w.msg}`));
+      if (simproErrors.length) { log(`Excel errors already stored in Simpro: ${simproErrors.length}`); simproErrors.forEach(e => log(`  ${e.ser || '(no serial)'} (asset ${e.id}) ${e.field} = ${e.value}`)); }
+      log('\nDry run only - nothing was changed in Simpro.');
+      renderResults();
+    } catch (e) { showError(e.message); log('STOPPED: ' + e.message); }
+    progressDone(); setBusy(false);
+  };
+
+  /* ---------- results ---------- */
+  function tile(n, label, cls) { return `<div class="tile ${cls || ''}"><b>${n}</b><span>${label}</span></div>`; }
+  function renderResults() {
+    const p = plan;
+    const fieldChanges = p.changes.reduce((n, c) => n + c.changes.length, 0);
+    $('tiles').innerHTML =
+      tile(p.creates.length, 'to create', p.creates.length ? 'accent' : '') +
+      tile(p.changes.length, `to update<small>${fieldChanges} field change${fieldChanges === 1 ? '' : 's'}</small>`, p.changes.length ? 'accent' : '') +
+      tile(p.unchanged, 'unchanged') +
+      tile(p.warnings.length, 'warnings', p.warnings.length ? 'warn' : '') +
+      tile(p.simproOnly.length, 'in Simpro only<small>left alone</small>') +
+      (p.simproErrors.length ? tile(p.simproErrors.length, 'Excel errors<small>already in Simpro</small>', 'warn') : '') +
+      (p.jobPlans.length ? tile(okJobs(p).length, `job${okJobs(p).length === 1 ? '' : 's'} to complete<small>${okJobs(p).reduce((n, j) => n + j.attach.length, 0)} assets to attach${p.jobPlans.length - okJobs(p).length ? ` · ${p.jobPlans.length - okJobs(p).length} with problems` : ''}</small>`, p.jobPlans.length - okJobs(p).length ? 'warn' : (okJobs(p).length ? 'accent' : '')) : '');
+    const n = actionCount(p);
+    $('apply').textContent = n ? `Apply ${n} change${n === 1 ? '' : 's'} to Simpro` : 'Nothing to apply';
+    $('resultTitle').textContent = p.applied ? 'Result' : 'Dry run - nothing has been changed yet';
+    const tabs = [
+      ['create', `Create (${p.creates.length})`], ['update', `Update (${p.changes.length})`], ['warn', `Warnings (${p.warnings.length})`],
+      ['only', `In Simpro only (${p.simproOnly.length})`]
+    ];
+    if (p.jobPlans.length) tabs.splice(2, 0, ['jobs', `Jobs (${p.jobPlans.length})`]);
+    if (p.simproErrors.length) tabs.push(['serr', `Errors in Simpro (${p.simproErrors.length})`]);
+    if (p.unmapped.length || p.dupes.length) tabs.push(['other', 'Other notes']);
+    const first = (tabs.find(t => /\((?!0\))/.test(t[1])) || tabs[0])[0];
+    $('tabs').innerHTML = tabs.map(([k, l]) => `<button data-tab="${k}" class="${k === first ? 'on' : ''}">${l}</button>`).join('');
+    $('tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; [...$('tabs').children].forEach(x => x.classList.toggle('on', x === b)); renderTab(b.dataset.tab); };
+    renderTab(first);
+    $('results').hidden = false; updateButtons();
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function table(head, rows) {
+    if (!rows.length) return '<p class="empty">Nothing here.</p>';
+    return `<div class="tablewrap"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  function renderTab(k) {
+    const p = plan; let html = '';
+    if (k === 'create') html = p.creates.map(c => `<details class="asset"><summary><b>${esc(c.ser)}</b> <span class="muted">row ${c.rownum} · site ${esc(c.site)} · ${c.changes.length} fields</span>${c.newId ? ` <span class="pill ok">created ${c.newId}</span>` : ''}${c.error ? ` <span class="pill bad">error</span>` : ''}</summary>${table(['Field', 'Value'], c.changes.map(x => [esc(x.col), esc(x.nv)]))}</details>`).join('') || '<p class="empty">No new assets.</p>';
+    if (k === 'update') html = table(['Serial', 'Row', 'Asset', 'Field', 'Simpro now', 'Spreadsheet', ''], p.changes.flatMap(c => c.changes.map(x => [esc(c.ser), c.rownum, c.id, esc(x.col), `<span class="old">${esc(x.old) || '<i>blank</i>'}</span>`, `<span class="new">${esc(x.nv)}</span>`, x.status === 'ok' ? '<span class="pill ok">done</span>' : x.status ? '<span class="pill bad">failed</span>' : ''])));
+    if (k === 'jobs') html = '<p class="muted">After the assets are imported, each job below gets its assets attached, then the note <b>' + esc(noteText()) + '</b> is added to the job Notes, its stage is set to <b>Complete</b> and status to <b>Job : Completed</b>. A job is only completed if every one of its assets attached successfully.</p>' +
+      table(['Job', 'Name / site', 'Now', 'To attach', 'Already attached', 'Notes', ''], p.jobPlans.map(j => [
+        `<b>#${esc(j.jobNo)}</b>`,
+        j.job ? `${esc(j.job.name)}<br><span class="muted">${esc(j.job.site.Name || '')}</span>` : '',
+        j.job ? `${esc(j.job.stage)}<br><span class="muted">${esc(j.job.status)}</span>` : '',
+        j.attach.map(a => esc(a.ser) + (a.assetId ? '' : ' <span class="muted">(new)</span>') + (a.status === 'ok' ? ' <span class="pill ok">attached</span>' : a.status ? ' <span class="pill bad">failed</span>' : '')).join('<br>') || '<span class="muted">none</span>',
+        j.already.map(a => esc(a.ser)).join('<br>') || '<span class="muted">none</span>',
+        j.problems.map(x => `<span class="bad">${esc(x)}</span>`).concat(j.notes.map(esc)).join('<br>'),
+        j.closed ? '<span class="pill ok">completed</span>' : (j.result ? '<span class="pill bad">left open</span>' : (j.problems.length ? '<span class="pill bad">skipped</span>' : ''))
+      ]));
+    if (k === 'warn') html = table(['Row', 'Serial', 'Warning'], p.warnings.map(w => [w.row, esc(w.serial), esc(w.msg)]));
+    if (k === 'only') html = '<p class="muted">These are in Simpro but not in the sheet. The sync never deletes or archives anything.</p>' + table(['Serial', 'Site', 'Asset ID'], p.simproOnly.map(s => [esc(s.ser), esc(s.site), s.id]));
+    if (k === 'serr') html = '<p class="muted">These values were saved into Simpro as Excel errors by an earlier import. Fix the formula in the sheet and run again to replace them.</p>' + table(['Serial', 'Asset ID', 'Field', 'Value in Simpro'], p.simproErrors.map(e => [esc(e.ser), e.id, esc(e.field), esc(e.value)]));
+    if (k === 'other') html = (p.unmapped.length ? `<p><b>Columns with no matching Simpro field (ignored):</b> ${esc(p.unmapped.join(', '))}</p>` : '') +
+      (p.dupes.length ? '<p><b>Duplicate serials in Simpro</b> (the first asset is used):</p>' + table(['Serial', 'Site', 'Asset', 'Duplicate'], p.dupes.map(d => [esc(d.ser), esc(d.site), d.a, d.b])) : '');
+    $('tabBody').innerHTML = html;
+  }
+
+  /* ---------- apply ---------- */
+  $('apply').onclick = async () => {
+    const p = plan; const n = actionCount(p);
+    const jl = okJobs(p);
+    if (!confirm(`Apply ${n} change${n === 1 ? '' : 's'} to Simpro now?\n\n${p.creates.length} new asset(s), ${p.changes.length} updated asset(s)` + (jl.length ? `\n${jl.length} job(s) to attach assets to and complete: ${jl.map(j => '#' + j.jobNo).join(', ')}` : '') + '.')) return;
+    setBusy(true); showError('');
+    log(`\nAPPLY started ${new Date().toLocaleString('en-NZ')} by ${WHO}`);
+    let added = 0, updated = 0, errors = 0, done = 0, closedJobs = 0; const total = n;
+    const setField = async (site, aid, x) => {
+      const { status, data } = await call('PATCH', `/companies/${p.cid}/sites/${site}/assets/${aid}/customFields/${x.cfid}`, { Value: x.nv });
+      x.status = (status === 200 || status === 204) ? 'ok' : 'fail';
+      if (x.status !== 'ok') { errors++; log(`  ERROR ${aid} ${x.col}: ${status} ${brief(data)}`); }
+      return x.status === 'ok';
+    };
+    try {
+      await pool(p.changes, 3, async c => {
+        let ok = true; for (const x of c.changes) ok = (await setField(c.site, c.id, x)) && ok;
+        if (ok) updated++;
+      }, () => progress(`Applying… ${++done} of ${total}`, done, total));
+      for (const c of p.creates) {
+        const start = SyncCore.asDateIso(c.r['Date Installed']) || new Date().toISOString().slice(0, 10);
+        const { status, data } = await call('POST', `/companies/${p.cid}/sites/${c.site}/assets/`, { AssetType: +p.tid, StartDate: start });
+        if (!(status === 200 || status === 201) || !data || !data.ID) { errors++; c.error = true; log(`  ERROR creating ${c.ser} (row ${c.rownum}): ${status} ${brief(data)}`); }
+        else {
+          c.newId = data.ID; added++;
+          for (const x of c.changes) await setField(c.site, c.newId, x);
+          log(`  created asset ${c.newId} for ${c.ser}`);
+        }
+        progress(`Applying… ${++done} of ${total}`, done, total);
+      }
+      // ---- jobs: attach assets, then complete
+      const okStatus = r => r.status === 200 || r.status === 201 || r.status === 204;
+      for (const jp of jl) {
+        jp.result = { attached: 0, failed: 0 };
+        for (const it of jp.attach) {
+          let aid = it.assetId;
+          if (!aid) { const cr = p.creates.find(c => c.site === it.site && c.ser === it.ser); aid = cr && cr.newId; }
+          if (!aid) { it.status = 'fail'; jp.result.failed++; log(`  ERROR job ${jp.jobNo}: ${it.ser} has no Simpro asset (it was not created)`); continue; }
+          let r = await call('POST', ccPath(p, jp), { Asset: +aid });
+          if (!okStatus(r) && r.status >= 400 && r.status < 500) { const r2 = await call('POST', ccPath(p, jp), { Asset: { ID: +aid } }); if (okStatus(r2)) r = r2; }
+          if (okStatus(r)) { it.status = 'ok'; jp.result.attached++; }
+          else { it.status = 'fail'; jp.result.failed++; log(`  ERROR job ${jp.jobNo}: attaching ${it.ser} (asset ${aid}) failed: ${r.status} ${brief(r.data)}`); }
+        }
+        if (jp.result.failed) { errors++; log(`  Job ${jp.jobNo} LEFT OPEN - ${jp.result.failed} asset(s) could not be attached`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
+        const note = noteText();
+        if (!plainNotes(jp.job.notes).includes(note)) {
+          const newNotes = (jp.job.notes ? jp.job.notes + '\n' : '') + `<div>${note}</div>`;
+          const rn = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Notes: newNotes });
+          if (!okStatus(rn)) { errors++; jp.closeError = `notes: ${rn.status} ${brief(rn.data)}`; log(`  ERROR job ${jp.jobNo}: could not add the note - job LEFT OPEN: ${rn.status} ${brief(rn.data)}`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
+          jp.noteAdded = note;
+        }
+        let r = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Stage: 'Complete' });
+        if (!okStatus(r)) { errors++; jp.closeError = `stage: ${r.status} ${brief(r.data)}`; log(`  ERROR job ${jp.jobNo}: could not set stage Complete: ${r.status} ${brief(r.data)}`); }
+        else {
+          r = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Status: +p.completedStatus.ID });
+          if (!okStatus(r) && r.status >= 400 && r.status < 500) { const r2 = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Status: { ID: +p.completedStatus.ID } }); if (okStatus(r2)) r = r2; }
+          if (!okStatus(r)) { errors++; jp.closeError = `status: ${r.status} ${brief(r.data)}`; log(`  ERROR job ${jp.jobNo}: stage is Complete but status could not be set: ${r.status} ${brief(r.data)}`); }
+          else { jp.closed = true; closedJobs++; log(`  Job ${jp.jobNo}: attached ${jp.result.attached} asset(s), note "${note}", stage Complete, status "Job : Completed"`); }
+        }
+        progress(`Applying… ${++done} of ${total}`, done, total);
+      }
+    } catch (e) { showError('Stopped part-way: ' + e.message + ' - run the dry run again to see what is left.'); }
+    log(`\nDONE  Added: ${added}   Updated: ${updated}   Jobs completed: ${closedJobs}   Errors: ${errors}`);
+    p.applied = true; p.result = { added, updated, errors, closedJobs };
+    progressDone(); setBusy(false);
+    renderResults();
+    $('tiles').insertAdjacentHTML('afterbegin', `<div class="banner ${errors ? 'bad' : 'ok'}">${errors ? '⚠' : '✓'} Applied: ${added} added, ${updated} updated${jl.length ? `, ${closedJobs} of ${jl.length} job${jl.length === 1 ? '' : 's'} completed` : ''}, ${errors} error${errors === 1 ? '' : 's'}. Run the dry run again to confirm everything matches.</div>`);
+    downloadReport(true);
+  };
+
+  /* ---------- report download ---------- */
+  function csvCell(v) { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+  function downloadReport(auto) {
+    if (!plan) return;
+    const p = plan, rows = [['Action', 'Row', 'Site', 'Serial', 'Asset ID', 'Field', 'Simpro before', 'Spreadsheet', 'Result']];
+    p.changes.forEach(c => c.changes.forEach(x => rows.push(['UPDATE', c.rownum, c.site, c.ser, c.id, x.col, x.old, x.nv, x.status || ''])));
+    p.creates.forEach(c => c.changes.forEach(x => rows.push(['CREATE', c.rownum, c.site, c.ser, c.newId || '', x.col, '', x.nv, x.status || (c.error ? 'fail' : '')])));
+    p.warnings.forEach(w => rows.push(['WARNING', w.row, '', w.serial, '', '', '', w.msg, '']));
+    p.simproOnly.forEach(s => rows.push(['IN SIMPRO ONLY', '', s.site, s.ser, s.id, '', '', '', '']));
+    (p.jobPlans || []).forEach(j => {
+      j.attach.forEach(a => rows.push(['JOB ATTACH', a.rownum, a.site, a.ser, a.assetId || '', 'Job ' + j.jobNo, '', '', a.status || (j.problems.length ? 'skipped' : '')]));
+      j.already.forEach(a => rows.push(['JOB ALREADY ATTACHED', a.rownum, a.site, a.ser, a.assetId, 'Job ' + j.jobNo, '', '', '']));
+      rows.push(['JOB COMPLETE', '', j.job ? j.job.site.ID : '', '', '', 'Job ' + j.jobNo, j.job ? `${j.job.stage} / ${j.job.status}` : '', `Complete / Job : Completed / note: ${noteText()}`, j.closed ? 'ok' : (j.problems.length ? 'skipped: ' + j.problems.join('; ') : (j.result ? 'left open ' + (j.closeError || '') : ''))]);
+    });
+    p.simproErrors.forEach(e => rows.push(['ERROR IN SIMPRO', '', e.site, e.ser, e.id, e.field, e.value, '', '']));
+    const csv = '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n') + '\r\n\r\n' + logLines.map(l => csvCell(l)).join('\r\n');
+    const ts = p.stamp.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `Simpro sync ${p.applied ? 'APPLIED' : 'dry run'} ${p.fileName.replace(/\.[^.]+$/, '')} ${ts}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('download').onclick = () => downloadReport(false);
+
+  updateButtons();
+  loadSetup();
+}

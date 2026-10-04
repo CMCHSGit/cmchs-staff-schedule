@@ -1,8 +1,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { fileURLToPath } from 'node:url'
 
 export default defineConfig({
+  // Two pages: the schedule app, and SimproSync (admin-only Simpro asset
+  // sync at /simprosync/ - see simprosync/main.js). Same Firebase project
+  // and Microsoft sign-in.
+  build: {
+    rollupOptions: {
+      input: {
+        main:       fileURLToPath(new URL('./index.html', import.meta.url)),
+        simprosync: fileURLToPath(new URL('./simprosync/index.html', import.meta.url)),
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

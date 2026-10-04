@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SimproSync</title>
+<link rel="icon" type="image/png" href="/icons/icon-192.png?v=2">
+<style>
+:root{
+  --bg:#f5f6f8; --card:#fff; --ink:#1c2230; --muted:#5f6b7a; --line:#dfe3e8;
+  --accent:#1565c0; --accent-ink:#fff; --accent-soft:#e6f0fb;
+  --ok:#2e7d32; --ok-soft:#e8f5e9; --warn:#b26a00; --warn-soft:#fff4e0; --bad:#c62828; --bad-soft:#fdecea;
+}
+@media (prefers-color-scheme: dark){ :root{
+  --bg:#14171c; --card:#1d2129; --ink:#e6e9ee; --muted:#9aa4b2; --line:#30363f;
+  --accent:#5aa2f0; --accent-ink:#0b1320; --accent-soft:#1d2d42;
+  --ok:#66bb6a; --ok-soft:#1d2e20; --warn:#f0b04a; --warn-soft:#33291a; --bad:#ef6b6b; --bad-soft:#3a1f1f;
+}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,-apple-system,Arial,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:18px 28px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+header h1{font-size:20px;margin:0}
+header span{color:var(--muted);font-size:13px}
+header .who{margin-left:auto;display:flex;align-items:center;gap:10px}
+header .who button{padding:4px 10px;font-size:13px}
+.gatecard{max-width:560px;margin:40px auto 0}
+.gatecard p{margin:0 0 14px}
+main{max-width:1100px;margin:0 auto;padding:22px 28px 60px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 12px}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:180px;flex:1}
+select,input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.danger{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+input[type=file]{display:none}
+.ok{color:var(--ok)} .bad{color:var(--bad)}
+.muted{color:var(--muted)}
+#keyState{margin-right:auto}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:34px 18px;text-align:center;background:var(--card);transition:border-color .15s,background-color .15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop.has-file{padding:18px}
+.drop p{margin:4px 0}
+.drop .big{font-size:17px;font-weight:600}
+#fileInfo{margin-top:14px;text-align:left}
+#fileName{font-weight:600}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+#error{background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad);border-radius:8px;padding:10px 14px;white-space:pre-wrap}
+#progress{display:grid;gap:6px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+#progBar{height:100%;background:var(--accent);width:0;transition:width .2s}
+#progBar.indeterminate{width:35%!important;animation:slide 1.1s infinite ease-in-out}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid}
+.tile b{font-size:26px;line-height:1.1}
+.tile span{color:var(--muted);font-size:13px}
+.tile small{display:block;font-size:12px}
+.tile.accent{border-color:var(--accent);background:var(--accent-soft)}
+.tile.warn{border-color:var(--warn);background:var(--warn-soft)}
+.tile.warn b{color:var(--warn)}
+.banner{grid-column:1/-1;border-radius:8px;padding:10px 14px;font-weight:600}
+.banner.ok{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok)}
+.banner.bad{background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad)}
+#tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:6px 0 12px}
+#tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--muted);padding:8px 10px}
+#tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tablewrap{overflow-x:auto;max-height:520px;overflow-y:auto;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{position:sticky;top:0;background:var(--card);font-weight:600}
+.old{color:var(--muted);text-decoration:line-through}
+.new{font-weight:600}
+.pill{font-size:11px;border-radius:10px;padding:1px 8px;font-weight:600}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+details.asset{border:1px solid var(--line);border-radius:6px;margin-bottom:6px;padding:6px 10px}
+details.asset summary{cursor:pointer}
+details.asset .tablewrap{margin:8px 0 4px;max-height:none}
+.empty{color:var(--muted);font-style:italic}
+#log{font:12px/1.5 Consolas,monospace;white-space:pre-wrap;max-height:300px;overflow:auto;margin:8px 0 0;color:var(--muted)}
+.help{font-size:13px;color:var(--muted);margin:10px 0 0}
+body.busy{cursor:progress}
+@media (max-width:640px){header,main{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>SimproSync</h1>
+  <span>Updates and adds customer assets in cass.simprosuite.com from an asset list</span>
+  <span class="who" id="whoBar"><span id="whoName"></span> <button id="signOut">Sign out</button></span>
+</header>
+<main id="gate">
+  <section class="card gatecard">
+    <h2>SimproSync</h2>
+    <p id="gateMsg">Checking sign-in…</p>
+    <div class="actions"><button class="primary" id="signIn" hidden>Sign in with Microsoft</button><button id="gateSignOut" hidden>Sign out</button></div>
+  </section>
+</main>
+<main id="app" hidden>
+  <section class="card">
+    <h2>Setup</h2>
+    <div class="row">
+      <label class="f">Simpro company<select id="company"><option>Loading…</option></select></label>
+      <label class="f">Asset type<select id="assetType"></select></label>
+    </div>
+    <p class="help">Signed in with Microsoft. Simpro requests are relayed through the equipment tracker's Apps Script proxy - the Simpro key never reaches this page. Reports record who ran each sync.</p>
+  </section>
+
+  <section class="drop" id="drop">
+    <p class="big">Drop the asset list here</p>
+    <p class="muted">.xlsx or .csv · or <label for="file" style="color:var(--accent);cursor:pointer;text-decoration:underline">browse for the file</label></p>
+    <input type="file" id="file" accept=".xlsx,.xlsm,.csv">
+    <div id="fileInfo" hidden>
+      <div class="row">
+        <label class="f">File<span id="fileName"></span></label>
+        <label class="f">Sheet<select id="sheet"></select></label>
+        <label class="f">Only these serials (optional)<input type="text" id="only" placeholder="e.g. FP5-69036350, FP5-69036347"></label>
+      </div>
+      <div class="actions" style="margin-top:14px"><button class="primary" id="runDry">Run dry run</button><span class="muted">Reads Simpro and compares. Nothing is changed.</span></div>
+    </div>
+  </section>
+
+  <div id="error" hidden></div>
+  <section class="card" id="progress" hidden><span id="progText"></span><div class="bar"><div id="progBar"></div></div></section>
+
+  <section class="card" id="results" hidden>
+    <h2 id="resultTitle">Dry run</h2>
+    <div class="tiles" id="tiles"></div>
+    <div class="actions">
+      <button class="danger" id="apply" disabled>Apply to Simpro</button>
+      <button id="download">Download report (.csv)</button>
+    </div>
+    <div id="tabs"></div>
+    <div id="tabBody"></div>
+    <details style="margin-top:14px"><summary class="muted">Run log</summary><pre id="log"></pre></details>
+  </section>
+
+  <p class="help">How it works: assets are matched on <b>Serial Number</b> within each <b>Site ID</b>. Existing assets are updated, new serials are created. Blank cells never clear Simpro, values not in a Simpro list are rejected, Excel errors such as #REF! are skipped, and nothing is ever deleted. If the sheet has a <b>Simpro Job</b> column, each job's assets are attached to it after the import and the job is set to stage <b>Complete</b> / status <b>Job : Completed</b> &mdash; only if every asset attached.</p>
+</main>
+<script type="module" src="./main.js"></script>
+</body>
+</html>
