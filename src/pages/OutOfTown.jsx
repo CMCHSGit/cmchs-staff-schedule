@@ -4,16 +4,17 @@ import { Download, TriangleAlert } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { dayMonth } from '../utils/week'
-import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
+import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportDays, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
 import { downloadFbtReport, fbtReport } from '../utils/fbtReport'
 import Toast, { useToast } from '../components/Toast'
-import { Alert, Button, Loading } from '../components/ui'
+import { Alert, Badge, Button, Loading } from '../components/ui'
 
 const VEHICLE_KEY = 'css_oot_vehicle'
 const AUCKLAND_KEY = 'css_oot_auckland'
 const TRIPS_KEY = 'css_oot_trips'
 const DEFAULT_AUCKLAND = AUCKLAND_PLACES.join(', ')
-const VERDICT = { away: 'Out of town', auckland: 'In Auckland', no: 'Not out of town', blank: '' }
+const VERDICT = { away: 'Out of town', auckland: 'In Auckland', service: 'Car service/repair', no: 'Not on the report', blank: '' }
+const KIND_BADGE = { auckland: { tone: 'neutral', label: 'In Auckland' }, service: { tone: 'orange', label: 'Service / repair' } }
 
 /** What was typed against each record last time, so the notes are written once and kept. */
 function loadEdits() {
@@ -102,10 +103,11 @@ export default function OutOfTown() {
     return () => { cancelled = true }
   }, [quarter, user.uid])
 
-  const { away, skipped } = useMemo(() => awayDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
+  const days = useMemo(() => awayDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
   const read = useMemo(() => readDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
   const storedTwice = copies.filter(([w]) => slices.some(s => s.weekStart === w))
-  const rows = useMemo(() => withEdits(tripsOf(away), edits), [away, edits])
+  const rows = useMemo(() => withEdits(tripsOf(reportDays(days)), edits), [days, edits])
+  const aucklandRows = rows.filter(r => r.kind === 'auckland')
   const total = rows.filter(r => r.include).reduce((n, r) => n + r.dates.length, 0)
   const report = fbtReport({ vehicle: vehicle.trim(), quarter, trips: reportTrips(rows) })
 
@@ -114,14 +116,16 @@ export default function OutOfTown() {
     try { localStorage.setItem(TRIPS_KEY, JSON.stringify(edits)) } catch { /* private mode — it just won't be remembered */ }
   }, [edits])
   const edit = (row, patch) => setEdits(prev => updateEdits(prev, row, patch))
+  /** Tick or untick every record at a site in Auckland at once. */
+  const tickAuckland = include => setEdits(prev => aucklandRows.reduce((all, row) => updateEdits(all, row, { include }), prev))
 
-  /** "It's in Auckland" — remember the place so it's skipped from now on. */
+  /** "It's in Auckland" — remember the place, so it's flagged as Auckland from now on. */
   function markAuckland(places) {
     const known = new Set(aucklandPlaces.map(p => p.toLowerCase()))
     const added = places.filter(p => !known.has(p.toLowerCase()))
     if (!added.length) return
     setAucklandText([...aucklandPlaces, ...added].join(', '))
-    showToast(`${added.join(', ')} will count as Auckland from now on.`)
+    showToast(`${added.join(', ')} will be flagged as Auckland from now on.`)
   }
 
   function download() {
@@ -139,7 +143,7 @@ export default function OutOfTown() {
         <div className="page-head-text">
           <h1 className="page-title">Out of town</h1>
           <span className="page-sub">
-            Days you were away from Auckland, worked out from your schedule. Check them, then download the FBT vehicle report for your manager.
+            Days at a site, or with the car in for service or repair, worked out from your schedule. Check them, then download the FBT vehicle report for your manager.
           </span>
         </div>
       </div>
@@ -167,8 +171,11 @@ export default function OutOfTown() {
       </div>
 
       <p className="oot-note">
-        {quarter.label} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}, counted by the date of each day. A day at a site in Auckland — NSH, Waitakere and so on — isn’t out of town, so it isn’t counted.
-        Add what you did to each record’s notes. The vehicle, notes and ticks are saved as you type, on this computer.
+        {quarter.label} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}, counted by the date of each day. Days at a site in Auckland — NSH, Waitakere and so on — are listed too, flagged “In Auckland”, and go in the report unless you untick them.
+      </p>
+      <p className="oot-note">
+        To add a day the car was in for a service or repair, write “car service” or “car repair” in that day’s location in your schedule. Add what you did to each record’s notes.
+        The vehicle, notes and ticks are saved as you type, on this computer.
       </p>
 
       {!schedules ? <Loading /> : (
@@ -178,7 +185,14 @@ export default function OutOfTown() {
               {storedTwice.map(([w]) => `Week of ${dayMonth(w)}`).join(', ')} — the most recently saved copy was used. “What was read from your schedule” below shows which.
             </Alert>
           )}
-          <div className="card oot-table" role="table" aria-label={`Days out of Auckland, ${quarter.label}`}>
+          {aucklandRows.length > 0 && (
+            <p className="oot-hint oot-bulk">
+              {aucklandRows.length} {aucklandRows.length === 1 ? 'record is' : 'records are'} at a site in Auckland.
+              <button type="button" className="link-btn" onClick={() => tickAuckland(false)}>Untick them all</button>
+              <button type="button" className="link-btn" onClick={() => tickAuckland(true)}>Tick them all</button>
+            </p>
+          )}
+          <div className="card oot-table" role="table" aria-label={`Days on the report, ${quarter.label}`}>
             <div className="oot-row oot-head" role="row">
               <span role="columnheader" />
               <span role="columnheader">Dates</span>
@@ -186,7 +200,7 @@ export default function OutOfTown() {
               <span role="columnheader">Notes</span>
               <span role="columnheader" />
             </div>
-            {!rows.length && <div className="oot-empty" role="row">No days out of Auckland in {quarter.label}.</div>}
+            {!rows.length && <div className="oot-empty" role="row">No days at a site, or with the car in for service or repair, in {quarter.label}.</div>}
             {rows.map(r => (
               <div key={r.id} className={`oot-row${r.include ? '' : ' oot-off'}`} role="row">
                 <span role="cell">
@@ -198,7 +212,10 @@ export default function OutOfTown() {
                     onChange={e => edit(r, { include: e.target.checked })}
                   />
                 </span>
-                <span role="cell" className="oot-week">{tripLabel(r.dates)}</span>
+                <span role="cell" className="oot-week">
+                  {tripLabel(r.dates)}
+                  {KIND_BADGE[r.kind] && <Badge tone={KIND_BADGE[r.kind].tone}>{KIND_BADGE[r.kind].label}</Badge>}
+                </span>
                 <span role="cell" className="oot-count">{r.dates.length}</span>
                 <span role="cell" className="oot-notes-cell">
                   <NotesBox label={`Notes, ${tripLabel(r.dates)}`} value={r.text} onChange={notes => edit(r, { notes })} />
@@ -210,7 +227,9 @@ export default function OutOfTown() {
                   )}
                 </span>
                 <span role="cell">
-                  <button type="button" className="link-btn" title="Count this place as Auckland from now on" onClick={() => markAuckland(r.places)}>It’s in Auckland</button>
+                  {r.kind === 'away' && (
+                    <button type="button" className="link-btn" title="Flag this place as Auckland from now on" onClick={() => markAuckland(r.places)}>It’s in Auckland</button>
+                  )}
                 </span>
               </div>
             ))}
@@ -218,17 +237,10 @@ export default function OutOfTown() {
               <span role="cell" />
               <span role="cell">Total</span>
               <span role="cell" className="oot-count">{total}</span>
-              <span role="cell">{total === 1 ? 'day' : 'days'} out of town in {quarter.label}</span>
+              <span role="cell">{total === 1 ? 'day' : 'days'} on the report for {quarter.label}</span>
               <span role="cell" />
             </div>
           </div>
-
-          <details className="excel-details oot-details">
-            <summary>In Auckland, not counted ({skipped.length} {skipped.length === 1 ? 'day' : 'days'})</summary>
-            {skipped.length
-              ? <ul>{skipped.map(s => <li key={s.iso}>{tripLabel([s.iso])} — {s.places.join(', ')}</li>)}</ul>
-              : <p className="oot-hint">No days at a site inside Auckland this quarter.</p>}
-          </details>
 
           <details className="excel-details oot-details">
             <summary>What was read from your schedule</summary>
@@ -256,7 +268,7 @@ export default function OutOfTown() {
 
           <details className="excel-details oot-details">
             <summary>Places that count as Auckland</summary>
-            <p className="oot-hint">A day at one of these isn’t out of town; anywhere not listed is. Separate them with commas.</p>
+            <p className="oot-hint">A record at one of these is flagged “In Auckland”, so it’s easy to untick; anywhere not listed is out of town. Separate them with commas.</p>
             <textarea
               className="input"
               rows={5}

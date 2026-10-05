@@ -2,7 +2,7 @@
 // The vehicle and trips here are made up.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fbtDate, fbtFileName, fbtReport, FBT_REASON } from '../src/utils/fbtReport.js'
+import { fbtDate, fbtFileName, fbtReport, FBT_REASON, FBT_REASONS } from '../src/utils/fbtReport.js'
 import { describeQuarter } from '../src/utils/outOfTown.js'
 
 const quarter = describeQuarter(2026, 3) // Q2 (Jul-Sep) 2026
@@ -70,6 +70,24 @@ test('the total adds up every record', () => {
   assert.equal(text.split('\n').filter(l => l === `Reason: ${FBT_REASON}`).length, 3)
   assert.match(text, /^Dates \(4 days\):$/m)
   assert.match(text, /^Dates \(1 day\):$/m)
+})
+
+test('a service or repair record has its own reason line; trips and Auckland sites keep the away-from-home one', () => {
+  const text = fbtReport({
+    vehicle: 'Car',
+    quarter,
+    trips: [
+      { kind: 'away', notes: 'Napier', dates: ['2026-07-06'] },
+      { kind: 'auckland', notes: 'Starship', dates: ['2026-07-07'] },
+      { kind: 'service', notes: 'Car service', dates: ['2026-07-08'] },
+      { notes: 'No kind given', dates: ['2026-07-09'] },
+    ],
+    generated,
+  })
+  assert.deepEqual(text.split('\n').filter(l => l.startsWith('Reason: ')), [
+    `Reason: ${FBT_REASONS.away}`, `Reason: ${FBT_REASON}`, 'Reason: Service or repair - car not available for personal use', `Reason: ${FBT_REASON}`,
+  ])
+  assert.match(text, /^Total Unavailable Days: 4$/m)
 })
 
 test('a quarter with no days still produces a report', () => {

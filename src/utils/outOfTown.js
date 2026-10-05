@@ -3,15 +3,41 @@ import { holidayOn } from './holidays.js'
 import { DAY_SHORT, MONTHS_SHORT, addDaysISO, fromISO, toISO, weekStartOf, normalizeSchedule } from './week.js'
 
 /**
- * Days out of town, for the quarterly FBT vehicle report that goes to the managers.
- * Out of town means out of Auckland — that's where the person is based — so a day at
- * NSH, Waitakere or Middlemore isn't one, but a day at a site in the Waikato or on a
- * course elsewhere is. Office, remote, work from home, non-working days, leave,
- * holidays and customer calls never count.
+ * The days that go on the quarterly FBT vehicle report that the managers get — each
+ * one a day the car wasn't available for private use, in one of three kinds:
+ *  - 'away': at a site or on a course out of town, i.e. outside Auckland (that's where
+ *    the person is based);
+ *  - 'auckland': at a site inside Auckland (NSH, Waitakere, Middlemore…). Listed too and
+ *    flagged, so each can be ticked or not;
+ *  - 'service': the car in for a service or repair, written in the day's location
+ *    ("Car service", "Car in for repair").
+ * Office, remote, work from home, non-working days, leave, holidays and customer calls
+ * never count.
  */
 const AWAY = new Set(['site', 'training'])
 
 const parts = location => (location || '').split('/').map(p => p.trim()).filter(Boolean)
+
+const CAR = /\b(car|vehicle)\b/
+const CAR_WORK = /\b(servic(e|es|ed|ing)|repair(s|ed|ing)?|garage|workshop|mechanic)\b/
+
+/**
+ * A part of a day saying the car was in for a service or repair — "Car service", "Car in for
+ * repair", "Vehicle being serviced". It has to be about the car: "A7 service training" is a
+ * job at a customer's, not the car at the garage.
+ */
+export const isCarWork = part => { const t = String(part || '').toLowerCase(); return CAR.test(t) && CAR_WORK.test(t) }
+
+/** One day's parts, sorted: the car's service/repair, and the places at a site or on a course. */
+function splitDay(day, holiday) {
+  const service = []
+  const places = []
+  for (const p of parts(day?.location)) {
+    if (isCarWork(p)) service.push(p)
+    else if (AWAY.has(statusOf({ location: p }, holiday))) places.push(p)
+  }
+  return { service, places }
+}
 
 /**
  * The places a day was spent at a site or on a course ("Waikato", "EAS course").
@@ -20,7 +46,7 @@ const parts = location => (location || '').split('/').map(p => p.trim()).filter(
  * A place typed on a holiday still counts — someone was working there.
  */
 export function awayPlaces(day, { holiday = '' } = {}) {
-  return parts(day?.location).filter(p => AWAY.has(statusOf({ location: p }, holiday)))
+  return splitDay(day, holiday).places
 }
 
 // ── Auckland ──────────────────────────────────────────────────────────────
@@ -29,8 +55,8 @@ export function awayPlaces(day, { holiday = '' } = {}) {
  * Places in the Auckland region, so a day there isn't "out of town". A place is in
  * Auckland when any of these appears in it as whole words, in any case — "NSH",
  * "North Shore Hospital", "Middlemore Install", "SX Auckland Surgical". Anything not
- * listed counts as out of town, so a new city needs no change here; the Out of town
- * page shows what was skipped and what was counted, and lets the list be edited.
+ * listed is out of town, so a new city needs no change here; the Out of town page
+ * flags the Auckland ones and lets the list be edited.
  * (The Auckland Council area runs from Warkworth to Pukekohe, hence those.)
  */
 export const AUCKLAND_PLACES = [
@@ -64,34 +90,53 @@ export const parsePlaces = text => String(text || '').split(/[,;\n]+/).map(s => 
 // ── days and trips ────────────────────────────────────────────────────────
 
 /**
- * The days spent out of Auckland in the given weeks (from quarterSlices), read from
- * `schedules` ({ [weekStart]: days }): { away, skipped }, both in date order.
- * `away` is [{ iso, places }] — the places outside Auckland that day. `skipped` is
- * the days at a site that were all in Auckland, kept so the page can show them.
+ * The days that belong on the report in the given weeks (from quarterSlices), read from
+ * `schedules` ({ [weekStart]: days }): { away, skipped, service }, each in date order and
+ * each day in exactly one of them — [{ iso, places }].
+ *  - `service`: the car in for a service or repair (that's the reason, whatever else was typed);
+ *  - `away`: the places outside Auckland that day;
+ *  - `skipped`: days at a site that were all inside Auckland.
+ * (reportDays puts them together, with a kind on each.)
  */
 export function awayDays(slices, schedules, { aucklandPlaces = AUCKLAND_PLACES } = {}) {
   const local = aucklandMatcher(aucklandPlaces)
   const away = []
   const skipped = []
+  const service = []
   for (const s of slices) {
     const days = normalizeSchedule(schedules?.[s.weekStart])
     for (const i of s.indices) {
       const iso = addDaysISO(s.weekStart, i)
-      const places = awayPlaces(days[i], { holiday: holidayOn(iso) })
+      const { service: car, places } = splitDay(days[i], holidayOn(iso))
       const outside = places.filter(p => !local(p))
-      if (outside.length) away.push({ iso, places: outside })
+      if (car.length) service.push({ iso, places: car })
+      else if (outside.length) away.push({ iso, places: outside })
       else if (places.length) skipped.push({ iso, places })
     }
   }
-  return { away, skipped }
+  return { away, skipped, service }
+}
+
+/**
+ * Every day on the report, in date order, each with its kind — 'away' (out of Auckland), 'auckland'
+ * (a site inside Auckland, listed so it can be ticked or not) or 'service' (the car in for a
+ * service or repair) — from awayDays.
+ */
+export function reportDays({ away = [], skipped = [], service = [] }) {
+  return [
+    ...away.map(d => ({ ...d, kind: 'away' })),
+    ...skipped.map(d => ({ ...d, kind: 'auckland' })),
+    ...service.map(d => ({ ...d, kind: 'service' })),
+  ].sort((a, b) => a.iso.localeCompare(b.iso))
 }
 
 /**
  * Every weekday of the given weeks as it was read from the schedule and how it was
  * treated, so a day that isn't on the report can be explained: one entry per week,
  * { weekStart, saved, days } — `days` is empty when nothing is saved for that week,
- * otherwise { iso, text, verdict } per weekday in the quarter, where verdict is
- * 'away' (counted), 'auckland' (a site in Auckland), 'no' (anything else) or 'blank'.
+ * otherwise { iso, text, verdict } per weekday in the quarter, where verdict is 'away' (out of
+ * Auckland), 'auckland' (a site in Auckland), 'service' (the car in for service or repair),
+ * 'no' (anything else — not on the report) or 'blank'.
  */
 export function readDays(slices, schedules, { aucklandPlaces = AUCKLAND_PLACES } = {}) {
   const local = aucklandMatcher(aucklandPlaces)
@@ -105,9 +150,9 @@ export function readDays(slices, schedules, { aucklandPlaces = AUCKLAND_PLACES }
       days: s.indices.map(i => {
         const iso = addDaysISO(s.weekStart, i)
         const text = (days[i].location || '').trim()
-        const places = awayPlaces(days[i], { holiday: holidayOn(iso) })
+        const { service, places } = splitDay(days[i], holidayOn(iso))
         const outside = places.filter(p => !local(p))
-        return { iso, text, verdict: !text ? 'blank' : outside.length ? 'away' : places.length ? 'auckland' : 'no' }
+        return { iso, text, verdict: !text ? 'blank' : service.length ? 'service' : outside.length ? 'away' : places.length ? 'auckland' : 'no' }
       }),
     }
   })
@@ -138,26 +183,32 @@ const nextWeekday = iso => { let d = addDaysISO(iso, 1); while (isWeekend(d)) d 
 
 /**
  * Runs of days in the same place, one record each — the FBT report lists a trip as
- * its place and the dates: [{ key, notes, places, dates }]. Days join when they are
- * consecutive weekdays (Friday then Monday counts) in the same place; a different
- * place, or a day at the office in between, starts a new record.
+ * its place and the dates: [{ kind, key, notes, places, dates }] (days come from reportDays;
+ * one with no kind is 'away'). Days join when they are consecutive weekdays (Friday then
+ * Monday counts) of the same kind in the same place; a different place, or a day at the
+ * office in between, starts a new record.
  */
 export function tripsOf(days) {
   const trips = []
   for (const day of days) {
+    const kind = day.kind || 'away'
     const notes = day.places.join(', ')
     const key = notes.toLowerCase().replace(/\s+/g, ' ')
     const last = trips.at(-1)
-    if (last && last.key === key && nextWeekday(last.dates.at(-1)) === day.iso) last.dates.push(day.iso)
-    else trips.push({ key, notes, places: day.places, dates: [day.iso] })
+    if (last && last.kind === kind && last.key === key && nextWeekday(last.dates.at(-1)) === day.iso) last.dates.push(day.iso)
+    else trips.push({ kind, key, notes, places: day.places, dates: [day.iso] })
   }
   return trips
 }
 
 const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim()
 
-/** A record's identity — its first date and place — so what was typed against it is remembered from one visit to the next. */
-export const tripId = t => `${t.dates[0]}|${t.key}`
+/**
+ * A record's identity — its first date and place — so what was typed against it is remembered from
+ * one visit to the next. Out-of-town and Auckland records share the form they have always had, so
+ * notes already saved stay attached; the car's service/repair records are marked.
+ */
+export const tripId = t => `${t.dates[0]}|${t.kind === 'service' ? 'service|' : ''}${t.key}`
 
 /**
  * The records with the person's changes laid over them: { …trip, id, include, text }.
@@ -185,9 +236,12 @@ export function updateEdits(edits, row, patch) {
   return Object.keys(next).length ? { ...rest, [row.id]: next } : rest
 }
 
-/** What goes on the report: the ticked records, each notes on one line, falling back to the schedule's place if cleared. */
+/**
+ * What goes on the report: the ticked records, each with its kind (which decides the reason line) and its
+ * notes on one line, falling back to the schedule's own text if cleared.
+ */
 export function reportTrips(rows) {
-  return rows.filter(r => r.include).map(r => ({ notes: oneLine(r.text) || r.notes, dates: r.dates }))
+  return rows.filter(r => r.include).map(r => ({ kind: r.kind || 'away', notes: oneLine(r.text) || r.notes, dates: r.dates }))
 }
 
 /** "Mon 6 – Thu 9 Jul 2026", "Wed 22 Jul 2026" — a record's dates, for the screen. */

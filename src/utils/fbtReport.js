@@ -5,7 +5,12 @@ import { MONTHS_LONG } from './week.js'
  * laid out exactly like the one already being sent: a header, the vehicle,
  * the quarter and the total, then one record per trip (its place and each date).
  */
-export const FBT_REASON = 'Away from home - car not available for personal use'
+export const FBT_REASONS = {
+  away: 'Away from home - car not available for personal use',
+  service: 'Service or repair - car not available for personal use',
+}
+/** The reason line on the trips (and on days at a site in Auckland). */
+export const FBT_REASON = FBT_REASONS.away
 
 const RULE = 50
 // "Sept", not "Sep" — that is how the report has always read.
@@ -24,8 +29,9 @@ const longDate = date => `${DAY_NAMES[date.getDay()]}, ${date.getDate()} ${MONTH
 const days = n => `${n} ${n === 1 ? 'day' : 'days'}`
 
 /**
- * The report text. `trips` is [{ notes, dates }] with each trip's dates as
- * YYYY-MM-DD in order; `quarter` is from describeQuarter().
+ * The report text. `trips` is [{ kind?, notes, dates }] with each trip's dates as
+ * YYYY-MM-DD in order; `kind` 'service' gives the service/repair reason, anything else
+ * the away-from-home one. `quarter` is from describeQuarter().
  */
 export function fbtReport({ vehicle, quarter, trips, generated = new Date() }) {
   const total = trips.reduce((n, t) => n + t.dates.length, 0)
@@ -41,7 +47,7 @@ export function fbtReport({ vehicle, quarter, trips, generated = new Date() }) {
   ]
   if (!trips.length) lines.push('', 'No days recorded for this quarter.')
   for (const t of trips) {
-    lines.push('', `Reason: ${FBT_REASON}`, `Notes: ${t.notes}`, `Dates (${days(t.dates.length)}):`, ...t.dates.map(d => `  - ${fbtDate(d)}`))
+    lines.push('', `Reason: ${FBT_REASONS[t.kind] || FBT_REASON}`, `Notes: ${t.notes}`, `Dates (${days(t.dates.length)}):`, ...t.dates.map(d => `  - ${fbtDate(d)}`))
   }
   lines.push('', '='.repeat(RULE), `Report generated: ${longDate(generated)}`, '')
   return lines.join('\n')

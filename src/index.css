@@ -112,7 +112,8 @@
 .oot-from { font: var(--type-caption); color: var(--text-muted); }
 .oot-from .link-btn { margin-left: 8px; font-size: inherit; }
 .oot-check { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-fg); cursor: pointer; }
-.oot-week { font: var(--weight-semibold) 15px/1.3 var(--font-body); color: var(--text-strong); }
+.oot-week { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; font: var(--weight-semibold) 15px/1.3 var(--font-body); color: var(--text-strong); }
+.oot-bulk .link-btn { margin-left: 12px; }
 .oot-count { text-align: center; font: var(--type-body-strong); color: var(--text-strong); }
 .oot-off .oot-week, .oot-off .oot-count { color: var(--text-muted); font-weight: 400; text-decoration: line-through; }
 .oot-off .input { opacity: .6; }
@@ -124,7 +125,7 @@
 .oot-read-head { margin-top: 6px; padding: 6px 0 2px; border-top: 1px solid var(--border-subtle); font: var(--weight-semibold) 13px/1.4 var(--font-body); color: var(--text-strong); }
 .oot-read-week:first-child .oot-read-head { margin-top: 0; border-top: none; }
 .oot-read-day { display: grid; grid-template-columns: 140px minmax(0, 1fr) 120px; gap: 8px; padding: 2px 0; font: var(--type-body-sm); color: var(--text-body); }
-.oot-v-away { color: var(--text-strong); font-weight: 600; }
+.oot-v-away, .oot-v-auckland, .oot-v-service { color: var(--text-strong); font-weight: 600; }
 .oot-v-blank { color: var(--text-muted); }
 .oot-preview { margin: 8px 0 0; padding: 12px; overflow-x: auto; background: var(--surface-subtle); border-radius: var(--radius-md); font: 13px/1.5 var(--font-mono); color: var(--text-body); white-space: pre; }
 @media (max-width: 759.98px) {

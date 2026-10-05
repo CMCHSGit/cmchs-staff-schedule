@@ -4,8 +4,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  AUCKLAND_PLACES, awayDays, awayPlaces, chooseSchedules, describeQuarter, inAuckland, parsePlaces,
-  quarterOf, quarterSlices, readDays, recentQuarters, reportTrips, tripLabel, tripsOf, updateEdits, withEdits,
+  AUCKLAND_PLACES, awayDays, awayPlaces, chooseSchedules, describeQuarter, inAuckland, isCarWork, parsePlaces,
+  quarterOf, quarterSlices, readDays, recentQuarters, reportDays, reportTrips, tripId, tripLabel, tripsOf, updateEdits, withEdits,
 } from '../src/utils/outOfTown.js'
 import { statusOf, describeDay } from '../src/utils/status.js'
 import { holidayOn } from '../src/utils/holidays.js'
@@ -107,7 +107,7 @@ const Q2 = describeQuarter(2026, 3) // Jul-Sep 2026
 
 test('only a site or a course out of Auckland counts: not the office, remote, home, leave or a holiday', () => {
   const none = inQuarter(Q2, { '2026-07-13': week('Cass Office', 'Remote Support', 'Work from Home', 'Annual Leave', 'Public Holiday') })
-  assert.deepEqual(none, { away: [], skipped: [] })
+  assert.deepEqual(none, { away: [], skipped: [], service: [] })
   const some = inQuarter(Q2, { '2026-07-13': week('Hamilton', 'Rotorua', 'EAS course', '', '') })
   assert.deepEqual(some.away.map(d => [d.iso, d.places]), [['2026-07-13', ['Hamilton']], ['2026-07-14', ['Rotorua']], ['2026-07-15', ['EAS course']]])
 })
@@ -131,7 +131,7 @@ test('only the days inside the quarter are looked at, and a missing week is noth
   // the week of 29 Jun: Mon–Tue are in the previous quarter, Wed–Fri are in this one
   const days = inQuarter(Q2, { '2026-06-29': week('Waikato', 'Waikato', 'Hamilton', 'Hamilton', 'Cass Office') })
   assert.deepEqual(days.away.map(d => d.iso), ['2026-07-01', '2026-07-02'])
-  assert.deepEqual(inQuarter(Q2, null), { away: [], skipped: [] })
+  assert.deepEqual(inQuarter(Q2, null), { away: [], skipped: [], service: [] })
 })
 
 test('the Auckland list in use decides what is skipped', () => {
@@ -140,6 +140,57 @@ test('the Auckland list in use decides what is skipped', () => {
   assert.deepEqual(inQuarter(Q2, schedules, { aucklandPlaces: ['hamilton'] }).away.map(d => d.places), [['NSH']])
   assert.deepEqual(inQuarter(Q2, schedules, { aucklandPlaces: [] }).away.map(d => d.places), [['Hamilton'], ['NSH']])
   assert.deepEqual(inQuarter(Q2, schedules).away.map(d => d.places), [['Hamilton']]) // the standard list: NSH is skipped
+})
+
+// ── the car in for a service or repair ────────────────────────────────────
+
+test('a part of a day about the car being serviced or repaired is recognised', () => {
+  for (const text of ['Car service', 'car in for service', 'Car repair', 'Car in for repairs', 'Vehicle being serviced', 'Service car', 'Car at the garage', 'Vehicle servicing'])
+    assert.ok(isCarWork(text), text)
+})
+
+test('a service or repair job at a customer is not the car going in', () => {
+  for (const text of ['A7 service training', 'Service and repair of the monitors', 'Servicing at Waikato Hospital', 'Car park', 'Cass Office', 'Hamilton', 'Repair'])
+    assert.ok(!isCarWork(text), text)
+})
+
+test('a day with the car in for service is its own kind, and the car is not a place', () => {
+  const found = inQuarter(Q2, { '2026-07-13': week('Cass Office / Car service', 'Car in for repair', 'Hamilton', 'Waikato / Car service', 'Cass Office') })
+  assert.deepEqual(found.service.map(d => [d.iso, d.places]), [['2026-07-13', ['Car service']], ['2026-07-14', ['Car in for repair']], ['2026-07-16', ['Car service']]])
+  assert.deepEqual(found.away.map(d => d.iso), ['2026-07-15'])  // Wed: Hamilton
+  assert.deepEqual(found.skipped, [])
+  assert.deepEqual(awayPlaces({ location: 'Waikato / Car service' }), ['Waikato']) // the car isn't somewhere visited
+})
+
+test('every day on the report is in one kind only, listed in date order', () => {
+  const found = inQuarter(Q2, { '2026-07-13': week('Hamilton', 'NSH', 'Car service', 'Waikato / NSH', 'Cass Office') })
+  assert.deepEqual(reportDays(found).map(d => [d.iso, d.kind, d.places]), [
+    ['2026-07-13', 'away', ['Hamilton']],
+    ['2026-07-14', 'auckland', ['NSH']],
+    ['2026-07-15', 'service', ['Car service']],
+    ['2026-07-16', 'away', ['Waikato']],
+  ])
+})
+
+test('service days and site days make separate records, and consecutive service days make one', () => {
+  const trips = tripsOf(reportDays({
+    away: [day('2026-07-13', 'Hamilton')],
+    skipped: [day('2026-07-14', 'NSH')],
+    service: [day('2026-07-15', 'Car service'), day('2026-07-16', 'Car service'), day('2026-07-17', 'Hamilton')],
+  }))
+  assert.deepEqual(trips.map(t => [t.kind, t.notes, t.dates.length]), [['away', 'Hamilton', 1], ['auckland', 'NSH', 1], ['service', 'Car service', 2], ['service', 'Hamilton', 1]])
+})
+
+test('a service record has its own id, and the ids saved before service records existed still fit', () => {
+  assert.equal(tripId({ kind: 'service', key: 'car service', dates: ['2026-08-11'] }), '2026-08-11|service|car service')
+  assert.equal(tripId({ kind: 'away', key: 'hamilton', dates: ['2026-07-13'] }), '2026-07-13|hamilton')
+  assert.equal(tripId({ kind: 'auckland', key: 'nsh', dates: ['2026-07-14'] }), '2026-07-14|nsh') // a place that became Auckland keeps its notes
+  assert.equal(tripId({ key: 'hamilton', dates: ['2026-07-13'] }), '2026-07-13|hamilton')
+})
+
+test('the report row says which kind a record is', () => {
+  const rows = withEdits(tripsOf(reportDays({ away: [day('2026-07-13', 'Hamilton')], skipped: [day('2026-07-14', 'NSH')], service: [day('2026-07-15', 'Car service')] })), { '2026-07-14|nsh': { include: false } })
+  assert.deepEqual(reportTrips(rows).map(r => [r.kind, r.notes]), [['away', 'Hamilton'], ['service', 'Car service']]) // the unticked Auckland one is out
 })
 
 // ── trips ─────────────────────────────────────────────────────────────────
@@ -177,10 +228,10 @@ test('two days in the same place with a day in the office between are two record
 })
 
 test('the read-out shows every weekday of a saved week and how each was counted', () => {
-  const out = readDays(quarterSlices(Q2), { '2026-08-24': week('Anglesea', 'Cass Office', 'Anglesea', '', 'NSH') })
+  const out = readDays(quarterSlices(Q2), { '2026-08-24': week('Anglesea', 'Cass Office', 'Anglesea', 'Car service', 'NSH') })
   assert.deepEqual(out.find(w => w.weekStart === '2026-08-24').days.map(d => [d.iso, d.text, d.verdict]), [
     ['2026-08-24', 'Anglesea', 'away'], ['2026-08-25', 'Cass Office', 'no'], ['2026-08-26', 'Anglesea', 'away'],
-    ['2026-08-27', '', 'blank'], ['2026-08-28', 'NSH', 'auckland'],
+    ['2026-08-27', 'Car service', 'service'], ['2026-08-28', 'NSH', 'auckland'],
   ])
   assert.deepEqual(out.find(w => w.weekStart === '2026-08-17'), { weekStart: '2026-08-17', saved: false, days: [] }) // nothing saved
   assert.equal(out.length, 14)
@@ -239,8 +290,8 @@ test('the report takes the ticked records, each notes on one line, falling back 
     '2026-09-01|tauranga': { notes: '   ' },
   })
   assert.deepEqual(reportTrips(rows), [
-    { notes: 'Upgraded the software at the hospital', dates: ['2026-07-13'] },
-    { notes: 'Tauranga', dates: ['2026-09-01'] },
+    { kind: 'away', notes: 'Upgraded the software at the hospital', dates: ['2026-07-13'] },
+    { kind: 'away', notes: 'Tauranga', dates: ['2026-09-01'] },
   ])
 })
 
