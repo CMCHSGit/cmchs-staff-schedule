@@ -114,3 +114,33 @@ export function holidaysForYear(year) {
 export function holidayOn(iso) {
   return holidaysForYear(Number(iso.slice(0, 4))).get(iso) || ''
 }
+
+/**
+ * How people actually type each holiday into a day — "EASTER", "ANZAC", "Kings
+ * birthday NZ", "PH" — keyed by the names above. Only ever checked on the date of
+ * that holiday, so a word that is also a place ("Waitangi", "Labour ward") stays a
+ * place on every other day, and on the holiday itself a ward is still a ward.
+ */
+const TYPED_AS = {
+  "New Year's Day": /new\s*year/,
+  'Day after New Year': /new\s*year|\b2(nd)?\s*jan|\bjan(uary)?\s*2(nd)?\b|day after/,
+  'Auckland Anniversary': /anniversary/,
+  'Waitangi Day': /waitangi/,
+  'Good Friday': /good\s*friday|easter/,
+  'Easter Monday': /easter/,
+  'ANZAC Day': /anzac/,
+  "King's Birthday": /^(king|queen)['’]?s?$|(king|queen)['’]?s?\s+b(irth)?day/,
+  Matariki: /matariki/,
+  'Labour Day': /^labou?r$|labou?r\s*(day|weekend)/,
+  'Christmas Day': /christmas|xmas/,
+  'Boxing Day': /boxing/,
+}
+/** "Holiday", "Pub hol", "PH", "Stat" — on a holiday's date these can only mean that holiday. */
+const ANY_HOLIDAY = /\bholiday\b|\bhol\b|\bph\b|\bstat\b/
+
+/** Whether what's typed in a day (any case) says it's the public holiday falling on that date. */
+export function namesHoliday(text, holidayName) {
+  const t = String(text || '').trim().toLowerCase()
+  if (!holidayName || !t) return false
+  return ANY_HOLIDAY.test(t) || !!TYPED_AS[holidayName.replace(/ \(observed\)$/, '')]?.test(t)
+}

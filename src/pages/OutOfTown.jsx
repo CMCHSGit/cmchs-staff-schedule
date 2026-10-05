@@ -54,7 +54,7 @@ export default function OutOfTown() {
   // One row per week the quarter touches. A week that crosses the quarter's edge
   // only counts the days inside it (`only`); the rest belong to the neighbouring quarter.
   const rows = slices.map(s => {
-    const auto = summariseWeek(normalizeSchedule(schedules?.[s.weekStart]), { countLeave, only: s.indices })
+    const auto = summariseWeek(normalizeSchedule(schedules?.[s.weekStart]), { countLeave, only: s.indices, weekStart: s.weekStart })
     const e = edits[s.weekStart] || {}
     return {
       weekStart: s.weekStart,

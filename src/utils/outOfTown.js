@@ -1,4 +1,5 @@
 import { statusOf } from './status.js'
+import { holidayOn } from './holidays.js'
 import { DAY_SHORT, MONTHS_SHORT, addDaysISO, fromISO, toISO, weekStartOf } from './week.js'
 
 /**
@@ -12,10 +13,15 @@ const AWAY = new Set(['site', 'training'])
 
 const parts = location => (location || '').split('/').map(p => p.trim()).filter(Boolean)
 
-/** The places that make one day "out of town" (empty when it doesn't count). */
-export function awayPlaces(day, { countLeave = false } = {}) {
+/**
+ * The places that make one day "out of town" (empty when it doesn't count).
+ * `holiday` is the public holiday on that date, if any: what's typed about it
+ * ("EASTER", "ANZAC", "Kings birthday NZ") is the holiday, not somewhere visited.
+ * A place typed on a holiday still counts — someone was working there.
+ */
+export function awayPlaces(day, { countLeave = false, holiday = '' } = {}) {
   return parts(day?.location).filter(p => {
-    const status = statusOf({ location: p })
+    const status = statusOf({ location: p }, holiday)
     return AWAY.has(status) || (countLeave && status === 'leave')
   })
 }
@@ -23,14 +29,15 @@ export function awayPlaces(day, { countLeave = false } = {}) {
 /**
  * { days, reason } for one week — reason lists each place once, in order.
  * `only` limits it to some of the five weekdays (0 = Monday), for a week that
- * is only partly inside the quarter being reported.
+ * is only partly inside the quarter being reported. `weekStart` (the Monday)
+ * lets each day be matched against the public holidays on its date.
  */
-export function summariseWeek(days, { only, ...options } = {}) {
+export function summariseWeek(days, { only, weekStart, ...options } = {}) {
   const seen = new Map()
   let count = 0
   ;(days || []).forEach((day, i) => {
     if (only && !only.includes(i)) return
-    const away = awayPlaces(day, options)
+    const away = awayPlaces(day, { ...options, holiday: weekStart ? holidayOn(addDaysISO(weekStart, i)) : '' })
     if (away.length) count++
     for (const p of away) if (!seen.has(p.toLowerCase())) seen.set(p.toLowerCase(), p)
   })

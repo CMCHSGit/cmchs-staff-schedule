@@ -128,9 +128,12 @@ downloads the Excel people send their manager (`src/utils/outOfTown.js`, `outOfT
   checks that over several years). The Excel dates every row inside its quarter too.
 - **What counts**: a site visit or a course/training. Office, remote, work from home, customer
   calls, non-working days and public holidays don't, and leave only when "Count leave days" is on.
-  A public holiday typed by name ("Matariki Day", "Labour Day") is recognised as a holiday
-  (`statusOf` in `src/utils/status.js`); a place that merely shares a word with one ("Waitangi")
-  is still a place.
+  A public holiday is recognised however it's typed (`statusOf` in `src/utils/status.js`): left
+  blank, "Public Holiday", by name ("Matariki Day", "Good Friday"), or shortened the way people
+  do ("EASTER", "ANZAC", "Kings birthday NZ", "PH"). Names that can't be a place count wherever
+  they appear; a word that could be one ("Waitangi", "Labour ward") is only the holiday on that
+  holiday's own date (`namesHoliday` in `src/utils/holidays.js`), so a ward is still a ward. A
+  place typed on a holiday still counts — someone was working there.
 - Each week can be corrected on screen before downloading (a part-week can't be given more days
   than it has inside the quarter). Corrections are dropped when the quarter or the person changes.
 

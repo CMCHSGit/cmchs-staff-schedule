@@ -8,6 +8,8 @@
  * re-tinting them to the brand palette — in dark mode too. Only the plain
  * (white in Excel) statuses follow the theme, via PLAIN.
  */
+import { namesHoliday } from './holidays.js'
+
 export const PLAIN = 'var(--cell-plain)'
 /** Text on an Excel fill is always dark, whatever the theme. */
 export const INK = '#1d1d1d'
@@ -45,19 +47,26 @@ export const LEGEND = [
 ]
 
 /**
- * A public holiday written by name rather than "Public Holiday" — the Excel
- * has plenty ("Matariki Day"), and without this they'd read as a place to visit.
- * The whole text has to be the holiday, so a place that shares a word with one
- * ("Waitangi", "Starship 20th Anniversary") stays a place.
+ * A public holiday written into a day rather than left to the app — "Public Holiday",
+ * or by name or shorthand: "Matariki Day", "Good Friday", "Kings birthday NZ", "EASTER".
+ * The Excel is full of them, and without this they'd read as a place to visit.
+ * The phrases in HOLIDAY_PHRASE can't be a place, so they count wherever they appear;
+ * HOLIDAY_ALONE words only when they're the whole entry. A word that is also a place
+ * ("Waitangi", "Labour ward", "Starship 20th Anniversary") is a holiday only on that
+ * holiday's own date — pass `holidayName` for that (see namesHoliday).
  */
-const HOLIDAY_NAME = /^(matariki( day)?|waitangi day|anzac day|labou?r day|boxing day|christmas day|new year['’]?s day|day after new year|good friday|easter monday|(king|queen)['’]?s birthday|(auckland )?anniversary( day)?)( \(observed\))?$/
+const HOLIDAY_PHRASE = /public holiday|stat(utory)? holiday|waitangi day|anzac day|labou?r day|boxing day|christmas day|xmas day|new year['’]?s day|day after new year|good friday|\beaster\b|(king|queen)['’]?s birthday|anniversary day|(canterbury|christchurch) show day|(auckland|wellington|northland|taranaki|hawke['’]?s bay|nelson|marlborough|canterbury|westland|otago|southland|chatham( islands)?) anniversary/
+const HOLIDAY_ALONE = /^((matariki|anzac|christmas|xmas|new year['’]?s?)( day)?|show day|ph|stat|pub(lic)? hol)( \(observed\))?$/
 
-/** Status key for a day's text + customer-calls flag, or null for an empty day. */
-export function statusOf(day) {
+/**
+ * Status key for a day's text + customer-calls flag, or null for an empty day.
+ * `holidayName` is the public holiday falling on that date, when the caller knows it.
+ */
+export function statusOf(day, holidayName = '') {
   const t = (day?.location || '').trim().toLowerCase()
   if (/\bleave\b|\blieu\b|\bsick\b|bereavement/.test(t)) return 'leave'
   if (/non[\s-]?working|\bnwd\b|\bday off\b/.test(t)) return 'nwd'
-  if (/public holiday|stat(utory)? holiday/.test(t) || HOLIDAY_NAME.test(t)) return 'holiday'
+  if (HOLIDAY_PHRASE.test(t) || HOLIDAY_ALONE.test(t) || namesHoliday(t, holidayName)) return 'holiday'
   if (/\bholiday\b/.test(t)) return 'leave' // "on holiday" = annual leave
   // `onCall` is the customer-calls flag — set on the on-call roster, folded
   // into the day by daysWithCalls() before anything here sees it.
@@ -79,7 +88,7 @@ export function describeDay(day, holidayName = '') {
   const calls = !!day?.onCall
   let text = location
   if (calls && !/customer call/i.test(location)) text = location ? `${location} / Customer Calls` : 'Customer Calls'
-  let status = statusOf(day)
+  let status = statusOf(day, holidayName)
   if (!status && holidayName) { status = 'holiday'; text = holidayName }
   const noteSource = status === 'holiday' && !location ? holidayName : location
   return {

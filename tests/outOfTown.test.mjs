@@ -3,7 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { describeQuarter, quarterOf, recentQuarters, quarterSlices, partLabel, summariseWeek, awayPlaces } from '../src/utils/outOfTown.js'
-import { statusOf } from '../src/utils/status.js'
+import { statusOf, describeDay } from '../src/utils/status.js'
+import { holidayOn } from '../src/utils/holidays.js'
 import { addDaysISO } from '../src/utils/week.js'
 
 const week = (...places) => places.map(location => ({ location }))
@@ -119,7 +120,49 @@ test('Matariki Day is not counted as a day out of town', () => {
   assert.deepEqual(awayPlaces({ location: 'Matariki Day / Waikato' }), ['Waikato']) // working at a site that day still counts
 })
 
+test('holidays typed the way people shorten them are holidays too', () => {
+  for (const text of [
+    'EASTER', 'Easter break', 'ANZAC', 'anzac day', 'Kings birthday NZ', "King's Birthday (NZ)", 'Queens Birthday', 'Christmas', 'XMAS', 'Xmas Day',
+    'New Year', 'New Years', 'Wellington Anniversary', 'Wellington Anniversary Day', 'Canterbury Show Day', 'Show Day', 'PH', 'Stat', 'Pub hol',
+  ]) assert.equal(statusOf({ location: text }), 'holiday', text)
+})
+
 test('places that share a word with a holiday are still places', () => {
-  for (const text of ['Waitangi', 'Anzac Parade', 'Labour ward', 'Starship 20th Anniversary', 'Anglesea Day Surgery', 'Anglesea Day Hamilton', 'Matariki School'])
+  for (const text of ['Waitangi', 'Anzac Parade', 'Labour ward', 'Starship 20th Anniversary', 'Anglesea Day Surgery', 'Anglesea Day Hamilton', 'Matariki School', 'Kings College', 'Trade show'])
     assert.equal(statusOf({ location: text }), 'site', text)
+})
+
+test('the three entries that were still being counted: EASTER, ANZAC and Kings birthday NZ', () => {
+  // Good Friday Fri 3 Apr, ANZAC Day observed Mon 27 Apr and King's Birthday Mon 1 Jun 2026
+  assert.equal(holidayOn('2026-04-03'), 'Good Friday')
+  assert.equal(holidayOn('2026-04-27'), 'ANZAC Day (observed)')
+  assert.equal(holidayOn('2026-06-01'), "King's Birthday")
+  assert.deepEqual(summariseWeek(week('Cass Office', 'Cass Office', 'Cass Office', 'Cass Office', 'EASTER'), { only: [2, 3, 4], weekStart: '2026-03-30' }), { days: 0, reason: '' })
+  assert.deepEqual(summariseWeek(week('ANZAC', 'Middlemore', 'Cass Office', 'Cass Office', 'Cass Office'), { weekStart: '2026-04-27' }), { days: 1, reason: 'Middlemore' })
+  assert.deepEqual(summariseWeek(week('Kings birthday NZ', 'Cass Office', 'Cass Office', 'Cass Office', 'Cass Office'), { weekStart: '2026-06-01' }), { days: 0, reason: '' })
+  // and with no dates at all (the text alone is enough for these)
+  assert.equal(summariseWeek(week('EASTER', 'ANZAC', 'Kings birthday NZ', '', '')).days, 0)
+})
+
+test('on a holiday’s own date, what is typed about it is the holiday — on any other day it is a place', () => {
+  // Fri 6 Feb 2026 is Waitangi Day; Mon 26 Oct 2026 is Labour Day
+  assert.equal(summariseWeek(week('', '', '', '', 'Waitangi'), { weekStart: '2026-02-02' }).days, 0)
+  assert.equal(summariseWeek(week('Waitangi', '', '', '', ''), { weekStart: '2026-02-02' }).days, 1) // Mon 2 Feb: just a place in Northland
+  assert.equal(summariseWeek(week('Labour', '', '', '', ''), { weekStart: '2026-10-26' }).days, 0)
+  assert.equal(summariseWeek(week('Labour ward', '', '', '', ''), { weekStart: '2026-10-26' }).days, 1) // a ward is still a ward
+  assert.equal(summariseWeek(week('Holiday', '', '', '', ''), { weekStart: '2026-10-26' }).days, 0)
+  assert.equal(statusOf({ location: 'Holiday' }, "King's Birthday"), 'holiday') // not leave: a public holiday isn't a leave day
+  assert.equal(statusOf({ location: 'Holiday' }), 'leave')                      // on an ordinary day it still is
+})
+
+test('a place typed on a holiday still counts, and so does one next to the holiday', () => {
+  assert.deepEqual(summariseWeek(week('Waikato', '', '', '', ''), { weekStart: '2026-10-26' }), { days: 1, reason: 'Waikato' })
+  assert.deepEqual(summariseWeek(week('Labour Day / Waikato', '', '', '', ''), { weekStart: '2026-10-26' }), { days: 1, reason: 'Waikato' })
+})
+
+test('views show a holiday typed in a day as a holiday', () => {
+  assert.equal(describeDay({ location: 'EASTER' }, 'Good Friday').status, 'holiday')
+  assert.equal(describeDay({ location: 'Waitangi' }, 'Waitangi Day').status, 'holiday')
+  assert.equal(describeDay({ location: 'Waitangi' }).status, 'site')
+  assert.equal(describeDay({ location: '' }, 'Matariki').text, 'Matariki') // an empty day still shows the holiday's own name
 })
