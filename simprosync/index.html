@@ -118,11 +118,12 @@ body.busy{cursor:progress}
         <label class="f">File<span id="fileName"></span></label>
         <label class="f">Only these serials (optional)<input type="text" id="only" placeholder="e.g. FP5-69036350, FP5-69036347"></label>
       </div>
-      <div class="row" id="warrantyFilterRow" hidden style="align-items:center;margin-top:4px">
+      <div id="warrantyFilterRow" hidden style="margin-top:4px">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink);cursor:pointer">
           <input type="checkbox" id="onlyWarranty">
-          Only items with <b>Extended Warranty</b> = Yes <span class="muted" id="warrantyCount"></span>
+          Only list <b>Extended Warranty</b> = Yes items in job notes <span class="muted" id="warrantyCount"></span>
         </label>
+        <p class="help" style="margin:2px 0 0 26px">Every asset in the ticked sheets is still created/updated and attached to its job either way - this only changes which ones get written into the job's Notes.</p>
       </div>
       <div style="margin-top:10px">
         <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Sheets to sync — tick which ones, and check each one's Simpro asset type</div>
