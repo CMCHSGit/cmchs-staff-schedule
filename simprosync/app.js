@@ -41,10 +41,14 @@ export function startApp({ transport, who }) {
       try {
         r = await transport(method, path, body);
       } catch (e) {
+        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '-', e.message); // TEMP diagnostic
         if (a < 3) { await sleep(2000 * (a + 1)); continue; }
         return { status: 0, data: 'Network error: ' + e.message };
       }
-      if ((r.status === 429 || r.status >= 500) && a < 3) { await sleep(4000 * (a + 1)); continue; }
+      if ((r.status === 429 || r.status >= 500) && a < 3) {
+        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '- status', r.status); // TEMP diagnostic
+        await sleep(4000 * (a + 1)); continue;
+      }
       return r;
     }
   }

@@ -51,10 +51,17 @@ function makeTransport() {
     if (!batch.length) return
     if (queue.length) scheduleFlush()
 
+    // TEMP diagnostic (see TODO below) - batch size and round-trip time,
+    // to find out whether requests are actually batching together and
+    // whether the proxy itself is the slow part.
+    const t0 = performance.now()
+    const tag = '[simproSync] batch of ' + batch.length
+
     let idToken
     try {
       idToken = await auth.currentUser.getIdToken()
     } catch (e) {
+      console.warn(tag, '- could not get ID token', e)
       batch.forEach(b => b.reject(new Error('Could not get a sign-in token: ' + (e.message || e))))
       return
     }
@@ -71,6 +78,7 @@ function makeTransport() {
         })
       })
     } catch (e) {
+      console.warn(tag, '- network error after', Math.round(performance.now() - t0), 'ms', e)
       batch.forEach(b => b.reject(new Error('Network error reaching the proxy: ' + (e.message || e))))
       return
     }
@@ -78,16 +86,19 @@ function makeTransport() {
     let json
     try { json = await res.json() }
     catch (e) {
+      console.warn(tag, '- bad response (status ' + res.status + ') after', Math.round(performance.now() - t0), 'ms')
       batch.forEach(b => b.reject(new Error('Bad response from the proxy (' + res.status + ')')))
       return
     }
 
     if (!json.success) {
+      console.warn(tag, '- proxy rejected after', Math.round(performance.now() - t0), 'ms:', json.error)
       const err = new Error(json.error || 'The proxy rejected the request')
       batch.forEach(b => b.reject(err))
       return
     }
 
+    console.log(tag, '- ok in', Math.round(performance.now() - t0), 'ms')
     batch.forEach((b, i) => {
       const r = json.results[i]
       b.resolve(r ? { status: r.status, data: r.data } : { status: 0, data: 'No result from the proxy' })
