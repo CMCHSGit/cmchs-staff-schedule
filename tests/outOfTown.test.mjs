@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AUCKLAND_PLACES, awayDays, awayPlaces, chooseSchedules, describeQuarter, inAuckland, isCarWork, parsePlaces,
-  quarterOf, quarterSlices, readDays, recentQuarters, reportDays, reportTrips, tripId, tripLabel, tripsOf, updateEdits, withEdits,
+  quarterOf, quarterSlices, readDays, recentQuarters, reportDays, reportNotes, reportTrips, tripId, tripLabel, tripsOf, updateEdits, withEdits,
 } from '../src/utils/outOfTown.js'
 import { statusOf, describeDay } from '../src/utils/status.js'
 import { holidayOn } from '../src/utils/holidays.js'
@@ -293,6 +293,27 @@ test('the report takes the ticked records, each notes on one line, falling back 
     { kind: 'away', notes: 'Upgraded the software at the hospital', dates: ['2026-07-13'] },
     { kind: 'away', notes: 'Tauranga', dates: ['2026-09-01'] },
   ])
+})
+
+test('the location and the additional notes are put together on the report', () => {
+  const rows = withEdits([trip('Anglesea Day Surgery', '2026-08-17'), trip('Hamilton', '2026-07-13'), trip('Rotorua', '2026-08-11')], {
+    '2026-08-17|anglesea day surgery': { details: '  DOR   install ' },
+    '2026-07-13|hamilton': { notes: 'Waikato Hospital', details: 'A7 service training' },
+    '2026-08-11|rotorua': { notes: 'Rotorua Hospital' }, // saved before there was a second box: it is simply the location
+  })
+  assert.deepEqual(rows.map(r => [r.text, r.details]), [['Anglesea Day Surgery', '  DOR   install '], ['Waikato Hospital', 'A7 service training'], ['Rotorua Hospital', '']])
+  assert.deepEqual(reportTrips(rows).map(r => r.notes), ['Anglesea Day Surgery DOR install', 'Waikato Hospital A7 service training', 'Rotorua Hospital'])
+})
+
+test('only what was added is kept; a cleared location leaves just the details, and nothing at all falls back to the place', () => {
+  const [row] = withEdits([trip('Hamilton', '2026-07-13')])
+  let edits = updateEdits({}, row, { details: 'Software upgrade' })
+  assert.deepEqual(edits, { [row.id]: { details: 'Software upgrade' } })
+  assert.deepEqual(updateEdits(edits, row, { details: '   ' }), {}) // cleared
+  edits = updateEdits({}, row, { notes: '', details: 'Server cabinet install at the hospital' })
+  assert.equal(reportNotes(withEdits([trip('Hamilton', '2026-07-13')], edits)[0]), 'Server cabinet install at the hospital')
+  assert.equal(reportNotes({ text: '', details: '', notes: 'Hamilton' }), 'Hamilton')
+  assert.equal(reportNotes({ text: 'Hamilton', details: 'line one\nline two', notes: 'Hamilton' }), 'Hamilton line one line two')
 })
 
 test('a record keeps its edits when more is added to it, but not when it moves to another date', () => {

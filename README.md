@@ -155,12 +155,18 @@ vehicle is typed once and, like the list of Auckland places, remembered in the b
 - **Records**: consecutive weekdays of the same kind in the same place become one record (the place
   is its Notes line, then each date); a different place, or a day somewhere else in between, starts
   another.
-  Each record can be unticked, and its notes — which start as the place from the schedule — added
-  to with what was done ("Server cabinet install at …"); a long note wraps in its box but is one
-  line on the report. Both are **saved in the browser as they're typed** (`css_oot_trips`), so they
-  survive a reload or a change of quarter. A record is remembered by its first date and place, only
-  what differs from the schedule is kept, and "Use this" puts the schedule's own text back. The page
-  also previews the report text exactly as it will be saved.
+  Each record has a **Location** box (the place from the schedule; it can be changed, and "Use
+  this" puts the schedule's own text back) and an **Additional notes** box for what was done ("DOR
+  install"). The report's Notes line is the two put together on one line, a space between —
+  "Anglesea Day Surgery" + "DOR install" → "Anglesea Day Surgery DOR install" — so any punctuation is
+  typed in the notes; a line under the boxes shows the result. Clear the location and just the
+  additional notes are printed; clear both and it falls back to the schedule's place. A long note
+  wraps in its box but is one line on the report. Notes, ticks and locations are **saved in the
+  browser as they're typed** (`css_oot_trips`), so they survive a reload or a change of quarter.
+  A record is remembered by its first date and place, and only what differs from the schedule is
+  kept. (Notes saved when there was a single box simply show as the location, with the same
+  report text.) Records can also be unticked. The page previews the report text exactly as it
+  will be saved.
 - **Read the way Team week reads**: the person's weeks are found by the `uid` saved inside each
   schedule, not by guessing the document id, so the two pages always agree; if a week were ever
   stored twice, the most recently saved copy is used and a warning says so. **What was read from

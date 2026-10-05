@@ -4,7 +4,7 @@ import { Download, TriangleAlert } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { dayMonth } from '../utils/week'
-import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportDays, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
+import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportDays, reportNotes, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
 import { downloadFbtReport, fbtReport } from '../utils/fbtReport'
 import Toast, { useToast } from '../components/Toast'
 import { Alert, Badge, Button, Loading } from '../components/ui'
@@ -24,8 +24,8 @@ function loadEdits() {
   } catch { return {} }
 }
 
-/** A notes box that grows to fit what's typed, so a whole line about the job stays in view. It is always one line on the report. */
-function NotesBox({ value, onChange, label }) {
+/** A text box that grows to fit what's typed, so a whole line about the job stays in view. It is always one line on the report. */
+function NotesBox({ value, onChange, label, placeholder }) {
   const ref = useRef(null)
   const fit = () => {
     const el = ref.current
@@ -49,7 +49,7 @@ function NotesBox({ value, onChange, label }) {
       rows={1}
       className="input"
       aria-label={label}
-      placeholder="What you did, and where"
+      placeholder={placeholder}
       value={value}
       onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
       onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
@@ -174,7 +174,7 @@ export default function OutOfTown() {
         {quarter.label} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}, counted by the date of each day. Days at a site in Auckland — NSH, Waitakere and so on — are listed too, flagged “In Auckland”, and go in the report unless you untick them.
       </p>
       <p className="oot-note">
-        To add a day the car was in for a service or repair, write “car service” or “car repair” in that day’s location in your schedule. Add what you did to each record’s notes.
+        To add a day the car was in for a service or repair, write “car service” or “car repair” in that day’s location in your schedule. Put what you did in each record’s Additional notes — the report prints the location and the additional notes together.
         The vehicle, notes and ticks are saved as you type, on this computer.
       </p>
 
@@ -197,7 +197,8 @@ export default function OutOfTown() {
               <span role="columnheader" />
               <span role="columnheader">Dates</span>
               <span role="columnheader">Days</span>
-              <span role="columnheader">Notes</span>
+              <span role="columnheader">Location</span>
+              <span role="columnheader">Additional notes</span>
               <span role="columnheader" />
             </div>
             {!rows.length && <div className="oot-empty" role="row">No days at a site, or with the car in for service or repair, in {quarter.label}.</div>}
@@ -218,13 +219,17 @@ export default function OutOfTown() {
                 </span>
                 <span role="cell" className="oot-count">{r.dates.length}</span>
                 <span role="cell" className="oot-notes-cell">
-                  <NotesBox label={`Notes, ${tripLabel(r.dates)}`} value={r.text} onChange={notes => edit(r, { notes })} />
+                  <NotesBox label={`Location, ${tripLabel(r.dates)}`} placeholder="Where" value={r.text} onChange={notes => edit(r, { notes })} />
                   {r.text !== r.notes && (
                     <span className="oot-from">
                       From your schedule: {r.notes}
                       <button type="button" className="link-btn" onClick={() => edit(r, { notes: undefined })}>Use this</button>
                     </span>
                   )}
+                </span>
+                <span role="cell" className="oot-notes-cell">
+                  <NotesBox label={`Additional notes, ${tripLabel(r.dates)}`} placeholder="What you did, e.g. DOR install" value={r.details} onChange={details => edit(r, { details })} />
+                  {r.details.trim() && <span className="oot-from">On the report: {reportNotes(r)}</span>}
                 </span>
                 <span role="cell">
                   {r.kind === 'away' && (
@@ -237,8 +242,7 @@ export default function OutOfTown() {
               <span role="cell" />
               <span role="cell">Total</span>
               <span role="cell" className="oot-count">{total}</span>
-              <span role="cell">{total === 1 ? 'day' : 'days'} on the report for {quarter.label}</span>
-              <span role="cell" />
+              <span role="cell" className="oot-total-text">{total === 1 ? 'day' : 'days'} on the report for {quarter.label}</span>
             </div>
           </div>
 

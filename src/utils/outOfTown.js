@@ -211,15 +211,17 @@ const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim()
 export const tripId = t => `${t.dates[0]}|${t.kind === 'service' ? 'service|' : ''}${t.key}`
 
 /**
- * The records with the person's changes laid over them: { …trip, id, include, text }.
- * `notes` stays what the schedule said (the place); `text` is what is shown and sent.
- * `edits` is { [id]: { include?: false, notes?: string } }.
+ * The records with the person's changes laid over them: { …trip, id, include, text, details }.
+ * `notes` stays what the schedule said (the place). `text` is the location as shown and sent — the
+ * place unless it was changed — and `details` is whatever the person adds about what was done.
+ * `edits` is { [id]: { include?: false, notes?: string, details?: string } }; `notes` there is the
+ * location, named for when only the place could be typed, so what was saved then still fits.
  */
 export function withEdits(trips, edits = {}) {
   return trips.map(t => {
     const id = tripId(t)
     const e = edits[id] || {}
-    return { ...t, id, include: e.include !== false, text: e.notes ?? t.notes }
+    return { ...t, id, include: e.include !== false, text: e.notes ?? t.notes, details: e.details ?? '' }
   })
 }
 
@@ -231,17 +233,22 @@ export function updateEdits(edits, row, patch) {
   const next = { ...edits[row.id], ...patch }
   if (next.include !== false) delete next.include
   if (next.notes === undefined || next.notes === row.notes) delete next.notes
+  if (!oneLine(next.details)) delete next.details
   const rest = { ...edits }
   delete rest[row.id]
   return Object.keys(next).length ? { ...rest, [row.id]: next } : rest
 }
 
 /**
- * What goes on the report: the ticked records, each with its kind (which decides the reason line) and its
- * notes on one line, falling back to the schedule's own text if cleared.
+ * The Notes line for a record on the report: its location and the additional notes put together on one
+ * line ("Anglesea Day Surgery" + "DOR install" → "Anglesea Day Surgery DOR install"). If both were
+ * cleared it falls back to the schedule's own text rather than printing nothing.
  */
+export const reportNotes = row => [oneLine(row.text), oneLine(row.details)].filter(Boolean).join(' ') || row.notes
+
+/** What goes on the report: the ticked records, each with its kind (which decides the reason line) and its Notes line. */
 export function reportTrips(rows) {
-  return rows.filter(r => r.include).map(r => ({ kind: r.kind || 'away', notes: oneLine(r.text) || r.notes, dates: r.dates }))
+  return rows.filter(r => r.include).map(r => ({ kind: r.kind || 'away', notes: reportNotes(r), dates: r.dates }))
 }
 
 /** "Mon 6 – Thu 9 Jul 2026", "Wed 22 Jul 2026" — a record's dates, for the screen. */

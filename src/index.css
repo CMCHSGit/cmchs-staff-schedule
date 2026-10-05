@@ -96,14 +96,14 @@
 @media print { .update-banner { display: none; } }
 
 /* Out-of-town report (the FBT vehicle report) */
-.oot-page { max-width: 1000px; }
+.oot-page { max-width: 1240px; }
 .oot-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; }
 .oot-controls .field { min-width: 200px; }
 .oot-vehicle { flex: 1 1 260px; max-width: 380px; }
 .oot-download { margin-left: auto; }
 .oot-note, .oot-hint { margin: 0; font: var(--type-body-sm); color: var(--text-muted); }
 .oot-table { overflow: hidden; }
-.oot-row { display: grid; grid-template-columns: 24px minmax(190px, 240px) 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border-subtle); }
+.oot-row { display: grid; grid-template-columns: 24px minmax(170px, 200px) 44px minmax(150px, .8fr) minmax(0, 1.4fr) 112px; gap: 12px; align-items: center; padding: 8px 16px; border-top: 1px solid var(--border-subtle); }
 .oot-row .input { padding-top: 7px; padding-bottom: 7px; }
 .oot-head { border-top: none; background: var(--surface-subtle); padding-top: 10px; padding-bottom: 10px; }
 .oot-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
@@ -118,6 +118,7 @@
 .oot-off .oot-week, .oot-off .oot-count { color: var(--text-muted); font-weight: 400; text-decoration: line-through; }
 .oot-off .input { opacity: .6; }
 .oot-total { background: var(--surface-brand-tint); font: var(--type-body-strong); color: var(--text-strong); padding-top: 12px; padding-bottom: 12px; }
+.oot-total .oot-total-text { grid-column: 4 / -1; }
 .oot-empty { padding: 24px 16px; text-align: center; color: var(--text-muted); font: var(--type-body); }
 .oot-details p { margin: 8px 0; }
 .oot-details textarea { margin-bottom: 6px; }
@@ -130,8 +131,8 @@
 .oot-preview { margin: 8px 0 0; padding: 12px; overflow-x: auto; background: var(--surface-subtle); border-radius: var(--radius-md); font: 13px/1.5 var(--font-mono); color: var(--text-body); white-space: pre; }
 @media (max-width: 759.98px) {
   .oot-row { grid-template-columns: 24px minmax(0, 1fr) 40px; gap: 6px 10px; padding: 8px 10px; }
-  .oot-row > :nth-child(4), .oot-row > :nth-child(5) { grid-column: 2 / -1; }
-  .oot-head > :nth-child(4), .oot-head > :nth-child(5) { display: none; }
+  .oot-row > :nth-child(n+4) { grid-column: 2 / -1; }
+  .oot-head > :nth-child(n+4) { display: none; }
   .oot-download { margin-left: 0; width: 100%; }
   .oot-vehicle { max-width: none; }
   .oot-read-day { grid-template-columns: 112px minmax(0, 1fr) 84px; gap: 6px; }
