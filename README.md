@@ -176,6 +176,32 @@ vehicle is typed once and, like the list of Auckland places, remembered in the b
 
 ---
 
+## 4d. Team week grid (desktop)
+
+Team week is an Excel-style grid (`src/hooks/useWeekGrid.js`, with the pure parts in
+`src/utils/gridOps.js`, which `npm test` covers):
+
+- **Select**: click a cell; drag, Shift-click or Shift+arrows for a range; Ctrl+A for everything;
+  Shift+Space / Ctrl+Space for the row / column. The arrows, Home/End, PageUp/PageDown and
+  Ctrl+arrows move, and the page follows the active cell.
+- **Edit**: type straight in (an arrow key then commits and moves on), F2 or double-click to edit
+  what's there. Enter, Shift+Enter and Tab commit and move; Esc drops it; clicking another cell keeps
+  what was typed. Delete clears. Ctrl+Enter puts what you typed into every selected cell.
+- **Copy, cut, paste**: Ctrl+C / Ctrl+X / Ctrl+V, to and from Excel itself. What was copied or cut is
+  outlined until Esc or the next edit. A cut moves — the old cells empty when it's pasted — and going to
+  another week, or changing who's listed, forgets it. One copied cell fills a selected range; a block
+  repeats across a selection that is a whole number of blocks.
+- **Fill**: drag the small square on the corner of the selection (down, up, left or right, repeating
+  what's selected), or Ctrl+D to fill down.
+- **Undo / redo**: Ctrl+Z / Ctrl+Y step back and forward through the changes made to the week on
+  screen. They aren't offered after a failed save, since what's on screen has then been put back.
+- **Saving**: a change shows at once and is saved in the background, one person's week at a time and
+  always with that person's latest days, so quick typing can't overwrite itself. If a save fails the
+  cells go back and a message says so; closing the page while a save is still on its way asks first.
+- People who aren't admins can edit only their own row — pasting over somebody else's is refused.
+
+---
+
 ## 5. Local development
 
 ```bash
