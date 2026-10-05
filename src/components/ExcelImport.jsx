@@ -9,7 +9,7 @@ import { excelPeople, matchPeople, buildMapping, planImport, nameKey } from '../
 import { loadExisting, applyImportPlan } from '../utils/excelImportWrite'
 import { logActivity } from '../utils/activityLog'
 import { getCurrentWeekStart, weekDates, dayMonth, dayMonthYear, DAY_SHORT } from '../utils/week'
-import { recentQuarters, quarterWeeks } from '../utils/outOfTown'
+import { recentQuarters, quarterSlices } from '../utils/outOfTown'
 import { teamLabel } from '../utils/teams'
 import { shortNames } from '../utils/names'
 import { Alert, Badge, Button, Loading, Switch } from './ui'
@@ -18,7 +18,7 @@ import { Alert, Badge, Button, Loading, Switch } from './ui'
 const RANGES = [
   { value: 'upcoming', label: 'This week and later', from: () => getCurrentWeekStart(0) },
   { value: 'month',    label: 'From 4 weeks ago',    from: () => getCurrentWeekStart(-4) },
-  { value: 'lastq',    label: 'From the start of last quarter', from: () => quarterWeeks(recentQuarters(2)[1])[0] },
+  { value: 'lastq',    label: 'From the start of last quarter', from: () => quarterSlices(recentQuarters(2)[1])[0].weekStart },
   { value: 'year',     label: 'From 12 months ago',  from: () => getCurrentWeekStart(-52) },
   { value: 'all',      label: 'Every week in the file', from: () => '0000-00-00' },
 ]

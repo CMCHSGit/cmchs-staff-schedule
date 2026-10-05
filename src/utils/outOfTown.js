@@ -1,5 +1,5 @@
-import { statusOf } from './status'
-import { addDaysISO, fromISO, toISO, weekStartOf } from './week'
+import { statusOf } from './status.js'
+import { DAY_SHORT, MONTHS_SHORT, addDaysISO, fromISO, toISO, weekStartOf } from './week.js'
 
 /**
  * Out-of-town days, for the quarterly report people send their manager.
@@ -20,23 +20,45 @@ export function awayPlaces(day, { countLeave = false } = {}) {
   })
 }
 
-/** { days, reason } for one week — reason lists each place once, in order. */
-export function summariseWeek(days, options) {
+/**
+ * { days, reason } for one week — reason lists each place once, in order.
+ * `only` limits it to some of the five weekdays (0 = Monday), for a week that
+ * is only partly inside the quarter being reported.
+ */
+export function summariseWeek(days, { only, ...options } = {}) {
   const seen = new Map()
   let count = 0
-  for (const day of days || []) {
+  ;(days || []).forEach((day, i) => {
+    if (only && !only.includes(i)) return
     const away = awayPlaces(day, options)
     if (away.length) count++
     for (const p of away) if (!seen.has(p.toLowerCase())) seen.set(p.toLowerCase(), p)
-  }
+  })
   return { days: count, reason: [...seen.values()].join(', ') }
 }
 
-/** Calendar quarters (Q1 = Jan–Mar), as { year, q, label }. */
+/**
+ * A calendar quarter (Q1 = Jan–Mar): `title` is how the manager's request puts
+ * it ("Jul – Sep 2026" — the months, so there's no question which quarter is
+ * meant), `from`/`to` its first and last day.
+ */
+export function describeQuarter(year, q) {
+  const first = (q - 1) * 3
+  const months = `${MONTHS_SHORT[first]} – ${MONTHS_SHORT[first + 2]}`
+  return {
+    year,
+    q,
+    label: `${year} Q${q}`,
+    months,
+    title: `${months} ${year}`,
+    from: toISO(new Date(year, first, 1)),
+    to: toISO(new Date(year, first + 3, 0)),
+  }
+}
+
 export function quarterOf(date) {
   const d = new Date(date)
-  const q = Math.floor(d.getMonth() / 3) + 1
-  return { year: d.getFullYear(), q, label: `${d.getFullYear()} Q${q}` }
+  return describeQuarter(d.getFullYear(), Math.floor(d.getMonth() / 3) + 1)
 }
 
 /** The current quarter and the ones before it, newest first. */
@@ -46,16 +68,26 @@ export function recentQuarters(count = 8) {
 }
 
 /**
- * Every week whose Monday falls inside the quarter — the way the sheet does it,
- * so the week of 29 Sep counts towards Jul–Sep even though it ends in October.
+ * The weeks a quarter touches, each with the weekdays of it that fall inside
+ * the quarter — { weekStart, start, indices }, `start` being the first of them.
+ * Days are counted by their own date, not by which quarter the week's Monday is
+ * in, so "Jul – Sep" means 1 July to 30 September whatever day a week starts.
+ * A week that crosses the edge of a quarter is split between the two quarters,
+ * so every weekday lands in exactly one of them — none dropped, none twice.
  */
-export function quarterWeeks({ year, q }) {
-  const firstMonth = (q - 1) * 3
-  const start = new Date(year, firstMonth, 1)
-  const end = toISO(new Date(year, firstMonth + 3, 0)) // last day of the quarter
-  let monday = weekStartOf(start)
-  if (fromISO(monday) < start) monday = addDaysISO(monday, 7)
-  const weeks = []
-  for (; monday <= end; monday = addDaysISO(monday, 7)) weeks.push(monday)
-  return weeks
+export function quarterSlices({ from, to }) {
+  const slices = []
+  for (let monday = weekStartOf(fromISO(from)); monday <= to; monday = addDaysISO(monday, 7)) {
+    const indices = [0, 1, 2, 3, 4].filter(i => { const day = addDaysISO(monday, i); return day >= from && day <= to })
+    if (indices.length) slices.push({ weekStart: monday, start: addDaysISO(monday, indices[0]), indices })
+  }
+  return slices
+}
+
+/** "Wed–Fri", "Mon–Tue" or "Fri" for a week only partly inside the quarter; '' for a whole week. */
+export function partLabel(indices) {
+  if (indices.length >= 5) return ''
+  const first = DAY_SHORT[indices[0]]
+  const last = DAY_SHORT[indices[indices.length - 1]]
+  return first === last ? first : `${first}–${last}`
 }

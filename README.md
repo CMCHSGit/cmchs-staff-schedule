@@ -112,6 +112,30 @@ Import is pressed** — the screen shows what would change first.
 
 ---
 
+## 4c. Out of town report (Out of town tab)
+
+Counts each person's days at a site or on a course from their schedule, one row per week, and
+downloads the Excel people send their manager (`src/utils/outOfTown.js`, `outOfTownExcel.js`).
+
+- **A quarter is its months** — "Jul – Sep 2026", the way the manager's request words it — so
+  it never matters whether someone's "Q3" is a calendar or a financial one. The quarters are the
+  calendar ones (Jan – Mar, Apr – Jun, Jul – Sep, Oct – Dec).
+- **Days are counted by their own date**, not by whichever quarter a week's Monday falls in. A
+  week that crosses the start or end of a quarter is split between the two: Jul – Sep 2026 begins
+  on a Wednesday, so its first row reads "01/07/2026 · Wed–Fri only" (Mon–Tue are in Apr – Jun) and
+  its last, "28/09/2026 · Mon–Wed only" (1–2 Oct are in Oct – Dec). Every weekday lands in exactly
+  one quarter, so reports for neighbouring quarters never drop or double-count a day (`npm test`
+  checks that over several years). The Excel dates every row inside its quarter too.
+- **What counts**: a site visit or a course/training. Office, remote, work from home, customer
+  calls, non-working days and public holidays don't, and leave only when "Count leave days" is on.
+  A public holiday typed by name ("Matariki Day", "Labour Day") is recognised as a holiday
+  (`statusOf` in `src/utils/status.js`); a place that merely shares a word with one ("Waitangi")
+  is still a place.
+- Each week can be corrected on screen before downloading (a part-week can't be given more days
+  than it has inside the quarter). Corrections are dropped when the quarter or the person changes.
+
+---
+
 ## 5. Local development
 
 ```bash

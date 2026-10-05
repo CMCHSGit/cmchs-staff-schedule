@@ -9,8 +9,11 @@ const border = { top: thin, left: thin, bottom: thin, right: thin }
  * Builds and downloads the out-of-town sheet in the same layout people
  * already send their manager: Quarter · Year · Month · Week starting ·
  * No. of days · Out of town reason · Total Quarter days, with the quarter
- * and its total merged down the side. ExcelJS is loaded only when someone
- * actually downloads, so it never slows the app down otherwise.
+ * and its total merged down the side. The quarter reads as its months
+ * ("Jul – Sep 2026"), the way the request for it does, and a week that crosses
+ * the quarter's edge starts on the quarter's first day, so every date on the
+ * sheet is inside the quarter. ExcelJS is loaded only when someone actually
+ * downloads, so it never slows the app down otherwise.
  */
 export async function downloadOutOfTown({ person, quarter, rows }) {
   const { default: ExcelJS } = await import('exceljs')
@@ -19,7 +22,7 @@ export async function downloadOutOfTown({ person, quarter, rows }) {
   const ws = wb.addWorksheet('Out of town', { views: [{ state: 'frozen', ySplit: 1 }] })
 
   ws.columns = [
-    { header: 'Quarter', key: 'quarter', width: 11 },
+    { header: 'Quarter', key: 'quarter', width: 16 },
     { header: 'Year', key: 'year', width: 7 },
     { header: 'Month', key: 'month', width: 7 },
     { header: 'Week starting', key: 'week', width: 14 },
@@ -36,9 +39,9 @@ export async function downloadOutOfTown({ person, quarter, rows }) {
 
   const total = rows.reduce((n, r) => n + (Number(r.days) || 0), 0)
   rows.forEach(r => {
-    const d = fromISO(r.weekStart)
+    const d = fromISO(r.start || r.weekStart)
     ws.addRow({
-      quarter: quarter.label,
+      quarter: quarter.title,
       year: d.getFullYear(),
       month: d.getMonth() + 1,
       // UTC midnight, so Excel shows the same date in any time zone.
@@ -72,7 +75,7 @@ export async function downloadOutOfTown({ person, quarter, rows }) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `Out of town - ${person} - ${quarter.label}.xlsx`
+  a.download = `Out of town - ${person} - ${quarter.title.replace(' – ', '-')}.xlsx`
   document.body.appendChild(a)
   a.click()
   a.remove()

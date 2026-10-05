@@ -5,8 +5,8 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useUsers } from '../hooks/useScheduleData'
 import { shortNames } from '../utils/names'
-import { scheduleId, normalizeSchedule, fromISO } from '../utils/week'
-import { recentQuarters, quarterWeeks, summariseWeek } from '../utils/outOfTown'
+import { scheduleId, normalizeSchedule, fromISO, dayMonth } from '../utils/week'
+import { recentQuarters, quarterSlices, partLabel, summariseWeek } from '../utils/outOfTown'
 import { downloadOutOfTown } from '../utils/outOfTownExcel'
 import Toast, { useToast } from '../components/Toast'
 import { Button, Loading, Switch } from '../components/ui'
@@ -34,26 +34,37 @@ export default function OutOfTown() {
   const names = useMemo(() => shortNames(users), [users])
   const people = useMemo(() => [...users].sort((a, b) => (names.get(a.uid) || '').localeCompare(names.get(b.uid) || '')), [users, names])
   const quarter = quarters[quarterIdx]
-  const weeks = useMemo(() => quarterWeeks(quarter), [quarter])
+  const slices = useMemo(() => quarterSlices(quarter), [quarter])
+  const weekStarts = useMemo(() => slices.map(s => s.weekStart), [slices])
   const personName = (users.find(u => u.uid === uid)?.displayName) || profile?.displayName || user.displayName || 'Me'
 
   useEffect(() => {
     let cancelled = false
     setSchedules(null)
     setEdits({})
-    Promise.all(weeks.map(w => getDoc(doc(db, 'schedules', scheduleId(w, uid))).then(s => [w, s.exists() ? s.data().days : null])))
+    Promise.all(weekStarts.map(w => getDoc(doc(db, 'schedules', scheduleId(w, uid))).then(s => [w, s.exists() ? s.data().days : null])))
       .then(entries => { if (!cancelled) setSchedules(Object.fromEntries(entries)) })
       .catch(e => { console.error(e); if (!cancelled) setSchedules({}) })
     return () => { cancelled = true }
-  }, [weeks, uid])
+  }, [weekStarts, uid])
 
   // Leave counting changes the automatic figures — drop hand edits with it.
   useEffect(() => setEdits({}), [countLeave])
 
-  const rows = weeks.map(w => {
-    const auto = summariseWeek(normalizeSchedule(schedules?.[w]), { countLeave })
-    const e = edits[w] || {}
-    return { weekStart: w, days: e.days ?? auto.days, reason: e.reason ?? auto.reason, edited: !!edits[w] }
+  // One row per week the quarter touches. A week that crosses the quarter's edge
+  // only counts the days inside it (`only`); the rest belong to the neighbouring quarter.
+  const rows = slices.map(s => {
+    const auto = summariseWeek(normalizeSchedule(schedules?.[s.weekStart]), { countLeave, only: s.indices })
+    const e = edits[s.weekStart] || {}
+    return {
+      weekStart: s.weekStart,
+      start: s.start,
+      part: partLabel(s.indices),
+      maxDays: s.indices.length,
+      days: e.days ?? auto.days,
+      reason: e.reason ?? auto.reason,
+      edited: !!edits[s.weekStart],
+    }
   })
   const total = rows.reduce((n, r) => n + (Number(r.days) || 0), 0)
   const edit = (w, field, value) => setEdits(prev => ({ ...prev, [w]: { ...prev[w], [field]: value } }))
@@ -85,7 +96,7 @@ export default function OutOfTown() {
         <label className="field">
           <span className="field-label">Quarter</span>
           <select value={quarterIdx} onChange={e => setQuarterIdx(Number(e.target.value))}>
-            {quarters.map((q, i) => <option key={q.label} value={i}>{q.label}{i === 0 ? ' (this quarter)' : ''}</option>)}
+            {quarters.map((q, i) => <option key={q.label} value={i}>{q.title}{i === 0 ? ' (this quarter)' : ''}</option>)}
           </select>
         </label>
         {isAdmin && (
@@ -102,8 +113,13 @@ export default function OutOfTown() {
         </Button>
       </div>
 
+      <p className="oot-note">
+        Counted by the date of each day: {quarter.title} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}.
+        {slices.some(s => s.indices.length < 5) && ' A week that runs over either end is split, so every day is counted in one quarter only.'}
+      </p>
+
       {!schedules ? <Loading /> : (
-        <div className="card oot-table" role="table" aria-label={`Out-of-town days, ${quarter.label}`}>
+        <div className="card oot-table" role="table" aria-label={`Out-of-town days, ${quarter.title}`}>
           <div className="oot-row oot-head" role="row">
             <span role="columnheader">Week starting</span>
             <span role="columnheader">Days</span>
@@ -111,23 +127,27 @@ export default function OutOfTown() {
           </div>
           {rows.map(r => (
             <div key={r.weekStart} className={`oot-row${r.days ? '' : ' oot-zero'}`} role="row">
-              <span role="cell" className="oot-week">{ddmmyyyy(r.weekStart)}{r.edited && <span className="oot-edited">edited</span>}</span>
+              <span role="cell" className="oot-week">
+                {ddmmyyyy(r.start)}
+                {r.part && <span className="oot-part" title={`Only ${r.part} of the week of ${dayMonth(r.weekStart)} falls in ${quarter.title}`}>{r.part} only</span>}
+                {r.edited && <span className="oot-edited">edited</span>}
+              </span>
               <span role="cell">
                 <input
                   className="input oot-days"
                   type="number"
                   min="0"
-                  max="5"
+                  max={r.maxDays}
                   inputMode="numeric"
-                  aria-label={`Days, week of ${ddmmyyyy(r.weekStart)}`}
+                  aria-label={`Days, week of ${ddmmyyyy(r.start)}`}
                   value={r.days}
-                  onChange={e => edit(r.weekStart, 'days', e.target.value === '' ? '' : Math.max(0, Math.min(5, Number(e.target.value))))}
+                  onChange={e => edit(r.weekStart, 'days', e.target.value === '' ? '' : Math.max(0, Math.min(r.maxDays, Number(e.target.value))))}
                 />
               </span>
               <span role="cell">
                 <input
                   className="input"
-                  aria-label={`Reason, week of ${ddmmyyyy(r.weekStart)}`}
+                  aria-label={`Reason, week of ${ddmmyyyy(r.start)}`}
                   value={r.reason}
                   placeholder="—"
                   onChange={e => edit(r.weekStart, 'reason', e.target.value)}
@@ -136,9 +156,9 @@ export default function OutOfTown() {
             </div>
           ))}
           <div className="oot-row oot-total" role="row">
-            <span role="cell">Total {quarter.label}</span>
+            <span role="cell">Total</span>
             <span role="cell">{total}</span>
-            <span role="cell">{total === 1 ? 'day' : 'days'} out of town</span>
+            <span role="cell">{total === 1 ? 'day' : 'days'} out of town in {quarter.title}</span>
           </div>
         </div>
       )}

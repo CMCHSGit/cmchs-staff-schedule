@@ -108,6 +108,8 @@
 .oot-head span { font: var(--type-overline); letter-spacing: var(--tracking-overline); text-transform: uppercase; color: var(--text-muted); }
 .oot-week { font: var(--weight-semibold) 15px/1.3 var(--font-body); color: var(--text-strong); display: flex; flex-direction: column; }
 .oot-edited { font: var(--type-caption); color: var(--accent-fg); }
+.oot-part { font: var(--type-caption); font-weight: 400; color: var(--text-muted); }
+.oot-note { margin: 0; font: var(--type-body-sm); color: var(--text-muted); }
 .oot-zero .oot-week { color: var(--text-muted); font-weight: 400; }
 .oot-days { text-align: center; }
 .oot-total { background: var(--surface-brand-tint); font: var(--type-body-strong); color: var(--text-strong); padding-top: 12px; padding-bottom: 12px; }

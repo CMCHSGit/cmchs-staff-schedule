@@ -44,12 +44,20 @@ export const LEGEND = [
   { label: 'Training', bg: STATUS.training.bg },
 ]
 
+/**
+ * A public holiday written by name rather than "Public Holiday" — the Excel
+ * has plenty ("Matariki Day"), and without this they'd read as a place to visit.
+ * The whole text has to be the holiday, so a place that shares a word with one
+ * ("Waitangi", "Starship 20th Anniversary") stays a place.
+ */
+const HOLIDAY_NAME = /^(matariki( day)?|waitangi day|anzac day|labou?r day|boxing day|christmas day|new year['’]?s day|day after new year|good friday|easter monday|(king|queen)['’]?s birthday|(auckland )?anniversary( day)?)( \(observed\))?$/
+
 /** Status key for a day's text + customer-calls flag, or null for an empty day. */
 export function statusOf(day) {
   const t = (day?.location || '').trim().toLowerCase()
   if (/\bleave\b|\blieu\b|\bsick\b|bereavement/.test(t)) return 'leave'
   if (/non[\s-]?working|\bnwd\b|\bday off\b/.test(t)) return 'nwd'
-  if (/public holiday|stat(utory)? holiday/.test(t)) return 'holiday'
+  if (/public holiday|stat(utory)? holiday/.test(t) || HOLIDAY_NAME.test(t)) return 'holiday'
   if (/\bholiday\b/.test(t)) return 'leave' // "on holiday" = annual leave
   // `onCall` is the customer-calls flag — set on the on-call roster, folded
   // into the day by daysWithCalls() before anything here sees it.
