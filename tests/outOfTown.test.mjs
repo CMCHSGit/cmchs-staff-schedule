@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AUCKLAND_PLACES, awayDays, awayPlaces, chooseSchedules, describeQuarter, inAuckland, parsePlaces,
-  quarterOf, quarterSlices, readDays, recentQuarters, tripLabel, tripsOf,
+  quarterOf, quarterSlices, readDays, recentQuarters, reportTrips, tripLabel, tripsOf, updateEdits, withEdits,
 } from '../src/utils/outOfTown.js'
 import { statusOf, describeDay } from '../src/utils/status.js'
 import { holidayOn } from '../src/utils/holidays.js'
@@ -202,6 +202,54 @@ test('a week stored twice uses the most recently saved copy, and says so', () =>
   assert.deepEqual(chosen.copies, [['2026-08-24', ['old', 'new']]])
   assert.deepEqual(Object.keys(chosen.schedules).sort(), ['2026-08-24', '2026-08-31'])
   assert.deepEqual(chooseSchedules([]), { schedules: {}, copies: [] })
+})
+
+// ── what the person adds to each record ───────────────────────────────────
+
+const trip = (notes, ...dates) => ({ key: notes.toLowerCase(), notes, places: [notes], dates })
+
+test('what is typed against a record is laid over it, and the schedule’s place stays as the default', () => {
+  const trips = [trip('Hamilton', '2026-07-13'), trip('Rotorua', '2026-08-11')]
+  assert.deepEqual(withEdits(trips).map(r => [r.id, r.include, r.text]), [['2026-07-13|hamilton', true, 'Hamilton'], ['2026-08-11|rotorua', true, 'Rotorua']])
+  const edited = withEdits(trips, { '2026-07-13|hamilton': { notes: 'Software upgrade at the hospital' }, '2026-08-11|rotorua': { include: false } })
+  assert.equal(edited[0].text, 'Software upgrade at the hospital')
+  assert.equal(edited[0].notes, 'Hamilton') // the schedule's own place is kept alongside
+  assert.equal(edited[1].include, false)
+})
+
+test('only what differs from the schedule is kept, so a corrected schedule isn’t held back by an old edit', () => {
+  const [row] = withEdits([trip('Hamilton', '2026-07-13')])
+  let edits = updateEdits({}, row, { notes: 'Install at the hospital' })
+  assert.deepEqual(edits, { [row.id]: { notes: 'Install at the hospital' } })
+  edits = updateEdits(edits, row, { notes: 'Hamilton' }) // typed back to what the schedule says
+  assert.deepEqual(edits, {})
+  edits = updateEdits(edits, row, { include: false })
+  assert.deepEqual(edits, { [row.id]: { include: false } })
+  edits = updateEdits(edits, row, { include: true }) // ticked again
+  assert.deepEqual(edits, {})
+  assert.deepEqual(updateEdits({ [row.id]: { notes: 'x' } }, row, { notes: undefined }), {}) // "Use this"
+  const other = { '2026-08-11|rotorua': { notes: 'y' } } // another record's edits are left alone
+  assert.deepEqual(updateEdits(other, row, { include: false }), { ...other, [row.id]: { include: false } })
+})
+
+test('the report takes the ticked records, each notes on one line, falling back to the place if cleared', () => {
+  const rows = withEdits([trip('Hamilton', '2026-07-13'), trip('Rotorua', '2026-08-11'), trip('Tauranga', '2026-09-01')], {
+    '2026-07-13|hamilton': { notes: '  Upgraded   the software\n at the hospital ' },
+    '2026-08-11|rotorua': { include: false },
+    '2026-09-01|tauranga': { notes: '   ' },
+  })
+  assert.deepEqual(reportTrips(rows), [
+    { notes: 'Upgraded the software at the hospital', dates: ['2026-07-13'] },
+    { notes: 'Tauranga', dates: ['2026-09-01'] },
+  ])
+})
+
+test('a record keeps its edits when more is added to it, but not when it moves to another date', () => {
+  const before = withEdits([trip('Hamilton', '2026-07-13')], { '2026-07-13|hamilton': { notes: 'kept' } })
+  const grown = withEdits([trip('Hamilton', '2026-07-13', '2026-07-14')], { '2026-07-13|hamilton': { notes: 'kept' } })
+  assert.equal(before[0].text, 'kept')
+  assert.equal(grown[0].text, 'kept')
+  assert.equal(withEdits([trip('Hamilton', '2026-07-14')], { '2026-07-13|hamilton': { notes: 'kept' } })[0].text, 'Hamilton')
 })
 
 test('a record’s dates read for the screen', () => {

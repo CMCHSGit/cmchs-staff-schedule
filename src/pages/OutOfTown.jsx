@@ -1,18 +1,60 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { Download, TriangleAlert } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { dayMonth } from '../utils/week'
-import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, tripLabel, tripsOf } from '../utils/outOfTown'
+import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
 import { downloadFbtReport, fbtReport } from '../utils/fbtReport'
 import Toast, { useToast } from '../components/Toast'
 import { Alert, Button, Loading } from '../components/ui'
 
 const VEHICLE_KEY = 'css_oot_vehicle'
 const AUCKLAND_KEY = 'css_oot_auckland'
+const TRIPS_KEY = 'css_oot_trips'
 const DEFAULT_AUCKLAND = AUCKLAND_PLACES.join(', ')
 const VERDICT = { away: 'Out of town', auckland: 'In Auckland', no: 'Not out of town', blank: '' }
+
+/** What was typed against each record last time, so the notes are written once and kept. */
+function loadEdits() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TRIPS_KEY) || '{}')
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+  } catch { return {} }
+}
+
+/** A notes box that grows to fit what's typed, so a whole line about the job stays in view. It is always one line on the report. */
+function NotesBox({ value, onChange, label }) {
+  const ref = useRef(null)
+  const fit = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px` // the text, plus the border
+  }
+  useLayoutEffect(fit, [value])
+  // Lines wrap differently when the box gets wider or narrower, so fit it again then too.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.offsetWidth
+    const watch = new ResizeObserver(() => { if (el.offsetWidth !== width) { width = el.offsetWidth; fit() } })
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className="input"
+      aria-label={label}
+      placeholder="What you did, and where"
+      value={value}
+      onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+    />
+  )
+}
 
 /** A string kept in this browser, so the vehicle and the Auckland list are typed once. */
 function useRemembered(key, fallback) {
@@ -37,7 +79,7 @@ export default function OutOfTown() {
   const [aucklandText, setAucklandText] = useRemembered(AUCKLAND_KEY, DEFAULT_AUCKLAND)
   const [schedules, setSchedules] = useState(null) // { [weekStart]: days }
   const [copies, setCopies] = useState([])         // weeks stored more than once: [[weekStart, [ids]]]
-  const [edits, setEdits] = useState({})           // { [trip id]: { include?, notes? } }
+  const [edits, setEdits] = useState(loadEdits)    // { [trip id]: { include?, notes? } } — saved as it changes
   const [toast, showToast] = useToast()
 
   const quarter = quarters[quarterIdx]
@@ -49,7 +91,6 @@ export default function OutOfTown() {
   useEffect(() => {
     let cancelled = false
     setSchedules(null)
-    setEdits({})
     getDocs(query(collection(db, 'schedules'), where('uid', '==', user.uid)))
       .then(snap => {
         if (cancelled) return
@@ -64,16 +105,15 @@ export default function OutOfTown() {
   const { away, skipped } = useMemo(() => awayDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
   const read = useMemo(() => readDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
   const storedTwice = copies.filter(([w]) => slices.some(s => s.weekStart === w))
-  const rows = useMemo(() => tripsOf(away).map(t => {
-    const id = `${t.dates[0]}|${t.key}`
-    const e = edits[id] || {}
-    return { ...t, id, include: e.include ?? true, text: e.notes ?? t.notes }
-  }), [away, edits])
-  const counted = rows.filter(r => r.include)
-  const total = counted.reduce((n, r) => n + r.dates.length, 0)
-  const report = fbtReport({ vehicle: vehicle.trim(), quarter, trips: counted.map(r => ({ notes: r.text.trim(), dates: r.dates })) })
+  const rows = useMemo(() => withEdits(tripsOf(away), edits), [away, edits])
+  const total = rows.filter(r => r.include).reduce((n, r) => n + r.dates.length, 0)
+  const report = fbtReport({ vehicle: vehicle.trim(), quarter, trips: reportTrips(rows) })
 
-  const edit = (id, patch) => setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  // Saved as it changes (in this browser), so nothing typed is lost on a reload or a change of quarter.
+  useEffect(() => {
+    try { localStorage.setItem(TRIPS_KEY, JSON.stringify(edits)) } catch { /* private mode — it just won't be remembered */ }
+  }, [edits])
+  const edit = (row, patch) => setEdits(prev => updateEdits(prev, row, patch))
 
   /** "It's in Auckland" — remember the place so it's skipped from now on. */
   function markAuckland(places) {
@@ -128,7 +168,7 @@ export default function OutOfTown() {
 
       <p className="oot-note">
         {quarter.label} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}, counted by the date of each day. A day at a site in Auckland — NSH, Waitakere and so on — isn’t out of town, so it isn’t counted.
-        The vehicle is printed on the report and remembered on this computer.
+        Add what you did to each record’s notes. The vehicle, notes and ticks are saved as you type, on this computer.
       </p>
 
       {!schedules ? <Loading /> : (
@@ -155,18 +195,19 @@ export default function OutOfTown() {
                     className="oot-check"
                     checked={r.include}
                     aria-label={`Include ${tripLabel(r.dates)}`}
-                    onChange={e => edit(r.id, { include: e.target.checked })}
+                    onChange={e => edit(r, { include: e.target.checked })}
                   />
                 </span>
                 <span role="cell" className="oot-week">{tripLabel(r.dates)}</span>
                 <span role="cell" className="oot-count">{r.dates.length}</span>
-                <span role="cell">
-                  <input
-                    className="input"
-                    aria-label={`Notes, ${tripLabel(r.dates)}`}
-                    value={r.text}
-                    onChange={e => edit(r.id, { notes: e.target.value })}
-                  />
+                <span role="cell" className="oot-notes-cell">
+                  <NotesBox label={`Notes, ${tripLabel(r.dates)}`} value={r.text} onChange={notes => edit(r, { notes })} />
+                  {r.text !== r.notes && (
+                    <span className="oot-from">
+                      From your schedule: {r.notes}
+                      <button type="button" className="link-btn" onClick={() => edit(r, { notes: undefined })}>Use this</button>
+                    </span>
+                  )}
                 </span>
                 <span role="cell">
                   <button type="button" className="link-btn" title="Count this place as Auckland from now on" onClick={() => markAuckland(r.places)}>It’s in Auckland</button>

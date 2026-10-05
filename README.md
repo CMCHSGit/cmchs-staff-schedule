@@ -145,8 +145,12 @@ vehicle is typed once and, like the list of Auckland places, remembered in the b
   someone was working there.
 - **Records**: consecutive weekdays in the same place become one record (the place is its Notes
   line, then each date); a different place, or a day somewhere else in between, starts another.
-  Each record can be unticked or have its notes edited before downloading; edits are dropped when
-  the quarter changes. The page also previews the report text exactly as it will be saved.
+  Each record can be unticked, and its notes — which start as the place from the schedule — added
+  to with what was done ("Server cabinet install at …"); a long note wraps in its box but is one
+  line on the report. Both are **saved in the browser as they're typed** (`css_oot_trips`), so they
+  survive a reload or a change of quarter. A record is remembered by its first date and place, only
+  what differs from the schedule is kept, and "Use this" puts the schedule's own text back. The page
+  also previews the report text exactly as it will be saved.
 - **Read the way Team week reads**: the person's weeks are found by the `uid` saved inside each
   schedule, not by guessing the document id, so the two pages always agree; if a week were ever
   stored twice, the most recently saved copy is used and a warning says so. **What was read from

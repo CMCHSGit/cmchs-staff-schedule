@@ -154,6 +154,42 @@ export function tripsOf(days) {
   return trips
 }
 
+const oneLine = s => String(s || '').replace(/\s+/g, ' ').trim()
+
+/** A record's identity — its first date and place — so what was typed against it is remembered from one visit to the next. */
+export const tripId = t => `${t.dates[0]}|${t.key}`
+
+/**
+ * The records with the person's changes laid over them: { …trip, id, include, text }.
+ * `notes` stays what the schedule said (the place); `text` is what is shown and sent.
+ * `edits` is { [id]: { include?: false, notes?: string } }.
+ */
+export function withEdits(trips, edits = {}) {
+  return trips.map(t => {
+    const id = tripId(t)
+    const e = edits[id] || {}
+    return { ...t, id, include: e.include !== false, text: e.notes ?? t.notes }
+  })
+}
+
+/**
+ * `edits` after one change to one record (from withEdits), holding only what differs from the
+ * schedule — so a place corrected in the schedule later isn't held back by an old edit.
+ */
+export function updateEdits(edits, row, patch) {
+  const next = { ...edits[row.id], ...patch }
+  if (next.include !== false) delete next.include
+  if (next.notes === undefined || next.notes === row.notes) delete next.notes
+  const rest = { ...edits }
+  delete rest[row.id]
+  return Object.keys(next).length ? { ...rest, [row.id]: next } : rest
+}
+
+/** What goes on the report: the ticked records, each notes on one line, falling back to the schedule's place if cleared. */
+export function reportTrips(rows) {
+  return rows.filter(r => r.include).map(r => ({ notes: oneLine(r.text) || r.notes, dates: r.dates }))
+}
+
 /** "Mon 6 – Thu 9 Jul 2026", "Wed 22 Jul 2026" — a record's dates, for the screen. */
 export function tripLabel(dates) {
   const f = iso => { const d = fromISO(iso); return { day: DAY_SHORT[d.getDay() - 1], n: d.getDate(), m: MONTHS_SHORT[d.getMonth()], y: d.getFullYear() } }
