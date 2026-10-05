@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Printer, Copy, MessageSquare } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -99,34 +99,119 @@ export default function TeamWeek() {
   const gridRowOf = new Map(gridRows.map((u, i) => [u.uid, i]))
   const locationOf = (r, c) => normalizeSchedule(schedules[gridRows[r]?.uid]?.days)[c]?.location || ''
 
-  /** Cells changed by typing, pasting or clearing in the Excel-style grid. */
-  async function applyGridChanges(changes) {
-    const byUid = new Map()
-    for (const { r, c, location } of changes) {
-      const u = gridRows[r]
-      if (!u) continue
-      const entry = byUid.get(u.uid) || { person: u, days: normalizeSchedule(schedules[u.uid]?.days) }
-      entry.days = entry.days.map((d, i) => (i === c ? { ...d, location } : d))
-      byUid.set(u.uid, entry)
-    }
-    if (!byUid.size) return
+  // ── the Excel-style grid's saving ──
+  // A change shows on screen at once and is saved in the background, one person's week at a time. What
+  // each save writes is that person's latest days (not the last copy the database confirmed), so a second
+  // edit made before the first is confirmed builds on it instead of overwriting it.
+  const saving = useRef(new Map())            // `${week}_${uid}` → { person, week, days, saved, comments, cells, writing, dirty }
+  const history = useRef({ undo: [], redo: [] }) // { weekStart, changes: [{ uid, c, before, after }] }
+  const newLocations = useRef(new Set())
+  const latest = useRef({})
+  latest.current = { schedules, locations, names }
+
+  /** The days to build a change on: unsaved changes included. */
+  const daysFor = person => saving.current.get(`${weekStart}_${person.uid}`)?.days ?? normalizeSchedule(schedules[person.uid]?.days)
+
+  async function drain(key) {
+    const slot = saving.current.get(key)
+    if (!slot || slot.writing) return
+    slot.writing = true
     try {
-      const typed = changes.map(ch => ch.location).filter(Boolean)
-      const fresh = await addNewLocations(typed, locations)
-      if (fresh.length) setLocations(prev => [...prev, ...fresh])
-      const entries = [...byUid.values()]
-      const saved = await Promise.all(entries.map(({ person, days }) =>
-        writeSchedule({ person, weekStart, days, comments: commentOf(person), editorUid: user.uid, existing: schedules[person.uid] })
-      ))
-      entries.forEach(({ person }, i) => patch(weekStart, person.uid, saved[i]))
-      showToast(entries.length > 1 ? `Updated ${entries.length} people.` : 'Saved.')
-      const cellWord = changes.length === 1 ? 'cell' : 'cells'
-      const peopleWord = entries.length === 1 ? names.get(entries[0].person.uid) : `${entries.length} people`
-      logActivity(user, `Updated ${changes.length} ${cellWord} for ${peopleWord} in Team week (week of ${weekLabel(weekStart)}).`)
+      while (slot.dirty) {
+        slot.dirty = false
+        const comments = latest.current.schedules[slot.person.uid]?.comments ?? slot.comments
+        slot.saved = await writeSchedule({ person: slot.person, weekStart: slot.week, days: slot.days, comments, editorUid: user.uid, existing: slot.saved })
+      }
+      saving.current.delete(key)
+      patch(slot.week, slot.person.uid, { ...slot.saved, days: slot.days })
+      logActivity(user, `Updated ${slot.cells} ${slot.cells === 1 ? 'cell' : 'cells'} for ${latest.current.names.get(slot.person.uid)} in Team week (week of ${weekLabel(slot.week)}).`)
+      if (!saving.current.size && !slot.quiet) showToast('Saved.')
     } catch (e) {
+      saving.current.delete(key)
+      history.current = { undo: [], redo: [] } // what's on screen no longer matches what these would undo
+      patch(slot.week, slot.person.uid, slot.saved || { uid: slot.person.uid, weekStart: slot.week, comments: slot.comments, days: normalizeSchedule(null) })
       saveFailed(e)
     }
   }
+
+  /** `quiet`: an undo or redo, which already said "Undone." — no "Saved." on top of it. */
+  function queueSave(person, days, cells, quiet = false) {
+    const key = `${weekStart}_${person.uid}`
+    let slot = saving.current.get(key)
+    if (!slot) {
+      const doc = schedules[person.uid] || null
+      slot = { person, week: weekStart, saved: doc, comments: doc?.comments || '', cells: 0, quiet, writing: false, dirty: false }
+      saving.current.set(key, slot)
+    } else {
+      slot.quiet = slot.quiet && quiet
+    }
+    slot.days = days
+    slot.cells += cells
+    slot.dirty = true
+    patch(weekStart, person.uid, { ...(slot.saved || { uid: person.uid, weekStart, comments: '' }), days })
+    if (!slot.writing) drain(key)
+  }
+
+  /** Typed-in places that aren't known yet become suggestions for everyone, once each. */
+  function rememberLocations(typed) {
+    const fresh = typed.filter(name => !newLocations.current.has(name.toLowerCase()))
+    if (!fresh.length) return
+    fresh.forEach(name => newLocations.current.add(name.toLowerCase()))
+    addNewLocations(fresh, latest.current.locations).then(added => { if (added.length) setLocations(prev => [...prev, ...added]) })
+  }
+
+  /**
+   * Sets cells, given as [{ uid, c, location }]: works out what changes, keeps it for Undo, and saves.
+   * Returns how many cells actually changed.
+   */
+  function applyByUid(list, { record = true } = {}) {
+    const touched = new Map()
+    const done = []
+    for (const { uid, c, location } of list) {
+      const person = users.find(u => u.uid === uid)
+      if (!person) continue
+      const entry = touched.get(uid) || { person, days: daysFor(person), cells: 0 }
+      const before = entry.days[c]?.location || ''
+      if (before === location) continue
+      done.push({ uid, c, before, after: location })
+      entry.days = entry.days.map((d, i) => (i === c ? { ...d, location } : d))
+      entry.cells++
+      touched.set(uid, entry)
+    }
+    if (!done.length) return 0
+    if (record) history.current = { undo: [...history.current.undo.slice(-99), { weekStart, changes: done }], redo: [] }
+    for (const { person, days, cells } of touched.values()) queueSave(person, days, cells, !record)
+    rememberLocations(done.map(d => d.after).filter(Boolean))
+    if (done.length > 12) showToast(`Changed ${done.length} cells — Ctrl+Z undoes it.`)
+    return done.length
+  }
+
+  /** Cells changed by typing, pasting, filling or clearing in the grid (rows are positions in the grid). */
+  function applyGridChanges(changes) {
+    applyByUid(changes.filter(ch => gridRows[ch.r]).map(ch => ({ uid: gridRows[ch.r].uid, c: ch.c, location: ch.location })))
+  }
+
+  /** Ctrl+Z / Ctrl+Y: the last change made in this week, put back (or put in again). */
+  function stepHistory(which) {
+    const from = history.current[which]
+    const to = history.current[which === 'undo' ? 'redo' : 'undo']
+    const entry = from.at(-1)
+    if (!entry) return showToast(which === 'undo' ? 'Nothing to undo.' : 'Nothing to redo.')
+    if (entry.weekStart !== weekStart) return showToast(`That change was in the week of ${dayMonth(entry.weekStart)} — go back to it to ${which} it.`)
+    from.pop()
+    to.push(entry)
+    const list = entry.changes.map(ch => ({ uid: ch.uid, c: ch.c, location: which === 'undo' ? ch.before : ch.after }))
+    applyByUid(list, { record: false })
+    grid.selectCells(list.map(ch => [gridRowOf.get(ch.uid), ch.c]).filter(([r]) => r !== undefined))
+    showToast(which === 'undo' ? 'Undone.' : 'Redone.')
+  }
+
+  // Anything still on its way to the database when the page is closed would be lost — ask first.
+  useEffect(() => {
+    const warn = e => { if (saving.current.size) { e.preventDefault(); e.returnValue = '' } }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [])
 
   const grid = useWeekGrid({
     rowCount: gridRows.length,
@@ -135,6 +220,9 @@ export default function TeamWeek() {
     canEdit: r => canEdit(gridRows[r]),
     onApply: applyGridChanges,
     onDenied: () => showToast('Not allowed — you can only edit your own row.'),
+    onUndo: () => stepHistory('undo'),
+    onRedo: () => stepHistory('redo'),
+    resetKey: `${weekStart}:${gridRows.map(u => u.uid).join()}`,
   })
 
   function saveFailed(e) {
@@ -319,6 +407,9 @@ export default function TeamWeek() {
               at once — quick fills, clearing the week, their comment. */}
           <div className="wk-desktop">
             <textarea {...grid.catcherProps} />
+            <p className="wk-hint">
+              Works like Excel: click a cell and type · Ctrl+C / Ctrl+X / Ctrl+V to copy, cut and paste (Excel too) · drag the square on the corner to fill · Ctrl+Z to undo
+            </p>
             <div className="wk-cols wk-head">
               <span>Name</span>
               {WEEK_DAYS.map((d, i) => (
@@ -361,12 +452,13 @@ export default function TeamWeek() {
                         return (
                           <div
                             key={i}
-                            className={`wk-cell${grid.isSelected(r, i) ? ' wk-cell-selected' : ''}${grid.isAnchor(r, i) ? ' wk-cell-anchor' : ''}${canEdit(u) ? '' : ' wk-cell-readonly'}`}
+                            className={`wk-cell${grid.isSelected(r, i) ? ' wk-cell-selected' : ''}${grid.isAnchor(r, i) ? ' wk-cell-anchor' : ''}${grid.isFillPreview(r, i) ? ' wk-cell-fillpreview' : ''}${canEdit(u) ? '' : ' wk-cell-readonly'} ${grid.clipEdges(r, i)}`}
                             style={isEditingHere ? undefined : { background: c.bg, ...(c.filled && { color: INK }) }}
                             title={isEditingHere ? undefined : c.text || undefined}
                             {...grid.cellHandlers(r, i)}
                           >
                             {isEditingHere ? <input className="wk-cell-edit" {...grid.editingInputProps} /> : c.text}
+                            {grid.isHandle(r, i) && canEdit(u) && <span className="wk-fill-handle" title="Drag to fill" {...grid.fillHandleProps} />}
                           </div>
                         )
                       })}

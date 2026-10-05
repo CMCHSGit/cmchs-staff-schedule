@@ -1,72 +1,139 @@
-import { useEffect, useMemo, useState } from 'react'
-import { doc, getDoc } from 'firebase/firestore'
-import { Download } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { Download, TriangleAlert } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { useUsers } from '../hooks/useScheduleData'
-import { shortNames } from '../utils/names'
-import { scheduleId, normalizeSchedule, fromISO } from '../utils/week'
-import { recentQuarters, quarterWeeks, summariseWeek } from '../utils/outOfTown'
-import { downloadOutOfTown } from '../utils/outOfTownExcel'
+import { dayMonth } from '../utils/week'
+import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, reportDays, reportNotes, reportTrips, tripLabel, tripsOf, updateEdits, withEdits } from '../utils/outOfTown'
+import { downloadFbtReport, fbtReport } from '../utils/fbtReport'
 import Toast, { useToast } from '../components/Toast'
-import { Button, Loading, Switch } from '../components/ui'
+import { Alert, Badge, Button, Loading } from '../components/ui'
 
-const ddmmyyyy = iso => { const d = fromISO(iso); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}` }
+const VEHICLE_KEY = 'css_oot_vehicle'
+const AUCKLAND_KEY = 'css_oot_auckland'
+const TRIPS_KEY = 'css_oot_trips'
+const DEFAULT_AUCKLAND = AUCKLAND_PLACES.join(', ')
+const VERDICT = { away: 'Out of town', auckland: 'In Auckland', service: 'Car service/repair', no: 'Not on the report', blank: '' }
+const KIND_BADGE = { auckland: { tone: 'neutral', label: 'In Auckland' }, service: { tone: 'orange', label: 'Service / repair' } }
+
+/** What was typed against each record last time, so the notes are written once and kept. */
+function loadEdits() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TRIPS_KEY) || '{}')
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
+  } catch { return {} }
+}
+
+/** A text box that grows to fit what's typed, so a whole line about the job stays in view. It is always one line on the report. */
+function NotesBox({ value, onChange, label, placeholder }) {
+  const ref = useRef(null)
+  const fit = () => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px` // the text, plus the border
+  }
+  useLayoutEffect(fit, [value])
+  // Lines wrap differently when the box gets wider or narrower, so fit it again then too.
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.offsetWidth
+    const watch = new ResizeObserver(() => { if (el.offsetWidth !== width) { width = el.offsetWidth; fit() } })
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      className="input"
+      aria-label={label}
+      placeholder={placeholder}
+      value={value}
+      onChange={e => onChange(e.target.value.replace(/\s*\n\s*/g, ' '))}
+      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+    />
+  )
+}
+
+/** A string kept in this browser, so the vehicle and the Auckland list are typed once. */
+function useRemembered(key, fallback) {
+  const [value, setValue] = useState(() => { try { return localStorage.getItem(key) ?? fallback } catch { return fallback } })
+  const set = next => {
+    setValue(next)
+    try { localStorage.setItem(key, next) } catch { /* private mode — it just won't be remembered */ }
+  }
+  return [value, set]
+}
 
 /**
- * Quarterly out-of-town days, worked out from someone's schedule — pick the
- * quarter, check (or tweak) each week, download the Excel to send on.
- * Everyone sees their own; admins can pick anyone.
+ * The quarterly FBT vehicle report: the days spent out of Auckland, worked out from
+ * the signed-in person's schedule, grouped into trips to check, then downloaded as
+ * the text report the managers get. A day at a site inside Auckland isn't out of town.
  */
 export default function OutOfTown() {
-  const { user, profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
+  const { user } = useAuth()
   const quarters = useMemo(() => recentQuarters(8), [])
   const [quarterIdx, setQuarterIdx] = useState(0)
-  const [uid, setUid] = useState(user.uid)
-  const [countLeave, setCountLeave] = useState(false)
+  const [vehicle, setVehicle] = useRemembered(VEHICLE_KEY, '')
+  const [aucklandText, setAucklandText] = useRemembered(AUCKLAND_KEY, DEFAULT_AUCKLAND)
   const [schedules, setSchedules] = useState(null) // { [weekStart]: days }
-  const [edits, setEdits] = useState({})           // { [weekStart]: { days?, reason? } }
-  const [downloading, setDownloading] = useState(false)
+  const [copies, setCopies] = useState([])         // weeks stored more than once: [[weekStart, [ids]]]
+  const [edits, setEdits] = useState(loadEdits)    // { [trip id]: { include?, notes? } } — saved as it changes
   const [toast, showToast] = useToast()
 
-  const { users } = useUsers()
-  const names = useMemo(() => shortNames(users), [users])
-  const people = useMemo(() => [...users].sort((a, b) => (names.get(a.uid) || '').localeCompare(names.get(b.uid) || '')), [users, names])
   const quarter = quarters[quarterIdx]
-  const weeks = useMemo(() => quarterWeeks(quarter), [quarter])
-  const personName = (users.find(u => u.uid === uid)?.displayName) || profile?.displayName || user.displayName || 'Me'
+  const slices = useMemo(() => quarterSlices(quarter), [quarter])
+  const aucklandPlaces = useMemo(() => parsePlaces(aucklandText), [aucklandText])
 
+  // Read this person's weeks the way Team week does — by the uid saved inside each one —
+  // so what the report counts is always what Team week shows.
   useEffect(() => {
     let cancelled = false
     setSchedules(null)
-    setEdits({})
-    Promise.all(weeks.map(w => getDoc(doc(db, 'schedules', scheduleId(w, uid))).then(s => [w, s.exists() ? s.data().days : null])))
-      .then(entries => { if (!cancelled) setSchedules(Object.fromEntries(entries)) })
-      .catch(e => { console.error(e); if (!cancelled) setSchedules({}) })
+    getDocs(query(collection(db, 'schedules'), where('uid', '==', user.uid)))
+      .then(snap => {
+        if (cancelled) return
+        const chosen = chooseSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setSchedules(chosen.schedules)
+        setCopies(chosen.copies)
+      })
+      .catch(e => { console.error(e); if (!cancelled) { setSchedules({}); setCopies([]) } })
     return () => { cancelled = true }
-  }, [weeks, uid])
+  }, [quarter, user.uid])
 
-  // Leave counting changes the automatic figures — drop hand edits with it.
-  useEffect(() => setEdits({}), [countLeave])
+  const days = useMemo(() => awayDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
+  const read = useMemo(() => readDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
+  const storedTwice = copies.filter(([w]) => slices.some(s => s.weekStart === w))
+  const rows = useMemo(() => withEdits(tripsOf(reportDays(days)), edits), [days, edits])
+  const aucklandRows = rows.filter(r => r.kind === 'auckland')
+  const total = rows.filter(r => r.include).reduce((n, r) => n + r.dates.length, 0)
+  const report = fbtReport({ vehicle: vehicle.trim(), quarter, trips: reportTrips(rows) })
 
-  const rows = weeks.map(w => {
-    const auto = summariseWeek(normalizeSchedule(schedules?.[w]), { countLeave })
-    const e = edits[w] || {}
-    return { weekStart: w, days: e.days ?? auto.days, reason: e.reason ?? auto.reason, edited: !!edits[w] }
-  })
-  const total = rows.reduce((n, r) => n + (Number(r.days) || 0), 0)
-  const edit = (w, field, value) => setEdits(prev => ({ ...prev, [w]: { ...prev[w], [field]: value } }))
+  // Saved as it changes (in this browser), so nothing typed is lost on a reload or a change of quarter.
+  useEffect(() => {
+    try { localStorage.setItem(TRIPS_KEY, JSON.stringify(edits)) } catch { /* private mode — it just won't be remembered */ }
+  }, [edits])
+  const edit = (row, patch) => setEdits(prev => updateEdits(prev, row, patch))
+  /** Tick or untick every record at a site in Auckland at once. */
+  const tickAuckland = include => setEdits(prev => aucklandRows.reduce((all, row) => updateEdits(all, row, { include }), prev))
 
-  async function download() {
-    setDownloading(true)
+  /** "It's in Auckland" — remember the place, so it's flagged as Auckland from now on. */
+  function markAuckland(places) {
+    const known = new Set(aucklandPlaces.map(p => p.toLowerCase()))
+    const added = places.filter(p => !known.has(p.toLowerCase()))
+    if (!added.length) return
+    setAucklandText([...aucklandPlaces, ...added].join(', '))
+    showToast(`${added.join(', ')} will be flagged as Auckland from now on.`)
+  }
+
+  function download() {
     try {
-      await downloadOutOfTown({ person: names.get(uid) || personName, quarter, rows })
+      downloadFbtReport({ quarter, text: report })
     } catch (e) {
       console.error(e)
-      showToast('Could not make the Excel file — try again.')
-    } finally {
-      setDownloading(false)
+      showToast('Could not save the report — try again.')
     }
   }
 
@@ -76,7 +143,7 @@ export default function OutOfTown() {
         <div className="page-head-text">
           <h1 className="page-title">Out of town</h1>
           <span className="page-sub">
-            Days at a site or on a course, counted from the schedule. Check each week, change anything that’s off, then download the Excel for your manager.
+            Days at a site, or with the car in for service or repair, worked out from your schedule. Check them, then download the FBT vehicle report for your manager.
           </span>
         </div>
       </div>
@@ -88,59 +155,139 @@ export default function OutOfTown() {
             {quarters.map((q, i) => <option key={q.label} value={i}>{q.label}{i === 0 ? ' (this quarter)' : ''}</option>)}
           </select>
         </label>
-        {isAdmin && (
-          <label className="field">
-            <span className="field-label">Person</span>
-            <select value={uid} onChange={e => setUid(e.target.value)}>
-              {people.map(u => <option key={u.uid} value={u.uid}>{names.get(u.uid)}{u.uid === user.uid ? ' (me)' : ''}</option>)}
-            </select>
-          </label>
-        )}
-        <Switch checked={countLeave} onChange={setCountLeave} label="Count leave days" />
-        <Button className="oot-download" iconLeft={<Download size={18} />} onClick={download} disabled={!schedules || downloading}>
-          {downloading ? 'Preparing…' : 'Download Excel'}
+        <label className="field oot-vehicle">
+          <span className="field-label">Vehicle</span>
+          <input className="input" value={vehicle} onChange={e => setVehicle(e.target.value)} placeholder="e.g. 2025 Toyota RAV4 (ABC123)" />
+        </label>
+        <Button
+          className="oot-download"
+          iconLeft={<Download size={18} />}
+          onClick={download}
+          disabled={!schedules || !vehicle.trim()}
+          title={vehicle.trim() ? undefined : 'Enter the vehicle first — it’s printed on the report'}
+        >
+          Download report
         </Button>
       </div>
 
+      <p className="oot-note">
+        {quarter.label} is {dayMonth(quarter.from)} to {dayMonth(quarter.to)}, counted by the date of each day. Days at a site in Auckland — NSH, Waitakere and so on — are listed too, flagged “In Auckland”, and go in the report unless you untick them.
+      </p>
+      <p className="oot-note">
+        To add a day the car was in for a service or repair, write “car service” or “car repair” in that day’s location in your schedule. Put what you did in each record’s Additional notes — the report prints the location and the additional notes together.
+        The vehicle, notes and ticks are saved as you type, on this computer.
+      </p>
+
       {!schedules ? <Loading /> : (
-        <div className="card oot-table" role="table" aria-label={`Out-of-town days, ${quarter.label}`}>
-          <div className="oot-row oot-head" role="row">
-            <span role="columnheader">Week starting</span>
-            <span role="columnheader">Days</span>
-            <span role="columnheader">Out of town reason</span>
-          </div>
-          {rows.map(r => (
-            <div key={r.weekStart} className={`oot-row${r.days ? '' : ' oot-zero'}`} role="row">
-              <span role="cell" className="oot-week">{ddmmyyyy(r.weekStart)}{r.edited && <span className="oot-edited">edited</span>}</span>
-              <span role="cell">
-                <input
-                  className="input oot-days"
-                  type="number"
-                  min="0"
-                  max="5"
-                  inputMode="numeric"
-                  aria-label={`Days, week of ${ddmmyyyy(r.weekStart)}`}
-                  value={r.days}
-                  onChange={e => edit(r.weekStart, 'days', e.target.value === '' ? '' : Math.max(0, Math.min(5, Number(e.target.value))))}
-                />
-              </span>
-              <span role="cell">
-                <input
-                  className="input"
-                  aria-label={`Reason, week of ${ddmmyyyy(r.weekStart)}`}
-                  value={r.reason}
-                  placeholder="—"
-                  onChange={e => edit(r.weekStart, 'reason', e.target.value)}
-                />
-              </span>
+        <>
+          {storedTwice.length > 0 && (
+            <Alert tone="warning" icon={<TriangleAlert size={20} />} title="A week is stored more than once">
+              {storedTwice.map(([w]) => `Week of ${dayMonth(w)}`).join(', ')} — the most recently saved copy was used. “What was read from your schedule” below shows which.
+            </Alert>
+          )}
+          {aucklandRows.length > 0 && (
+            <p className="oot-hint oot-bulk">
+              {aucklandRows.length} {aucklandRows.length === 1 ? 'record is' : 'records are'} at a site in Auckland.
+              <button type="button" className="link-btn" onClick={() => tickAuckland(false)}>Untick them all</button>
+              <button type="button" className="link-btn" onClick={() => tickAuckland(true)}>Tick them all</button>
+            </p>
+          )}
+          <div className="card oot-table" role="table" aria-label={`Days on the report, ${quarter.label}`}>
+            <div className="oot-row oot-head" role="row">
+              <span role="columnheader" />
+              <span role="columnheader">Dates</span>
+              <span role="columnheader">Days</span>
+              <span role="columnheader">Location</span>
+              <span role="columnheader">Additional notes</span>
+              <span role="columnheader" />
             </div>
-          ))}
-          <div className="oot-row oot-total" role="row">
-            <span role="cell">Total {quarter.label}</span>
-            <span role="cell">{total}</span>
-            <span role="cell">{total === 1 ? 'day' : 'days'} out of town</span>
+            {!rows.length && <div className="oot-empty" role="row">No days at a site, or with the car in for service or repair, in {quarter.label}.</div>}
+            {rows.map(r => (
+              <div key={r.id} className={`oot-row${r.include ? '' : ' oot-off'}`} role="row">
+                <span role="cell">
+                  <input
+                    type="checkbox"
+                    className="oot-check"
+                    checked={r.include}
+                    aria-label={`Include ${tripLabel(r.dates)}`}
+                    onChange={e => edit(r, { include: e.target.checked })}
+                  />
+                </span>
+                <span role="cell" className="oot-week">
+                  {tripLabel(r.dates)}
+                  {KIND_BADGE[r.kind] && <Badge tone={KIND_BADGE[r.kind].tone}>{KIND_BADGE[r.kind].label}</Badge>}
+                </span>
+                <span role="cell" className="oot-count">{r.dates.length}</span>
+                <span role="cell" className="oot-notes-cell">
+                  <NotesBox label={`Location, ${tripLabel(r.dates)}`} placeholder="Where" value={r.text} onChange={notes => edit(r, { notes })} />
+                  {r.text !== r.notes && (
+                    <span className="oot-from">
+                      From your schedule: {r.notes}
+                      <button type="button" className="link-btn" onClick={() => edit(r, { notes: undefined })}>Use this</button>
+                    </span>
+                  )}
+                </span>
+                <span role="cell" className="oot-notes-cell">
+                  <NotesBox label={`Additional notes, ${tripLabel(r.dates)}`} placeholder="What you did, e.g. DOR install" value={r.details} onChange={details => edit(r, { details })} />
+                  {r.details.trim() && <span className="oot-from">On the report: {reportNotes(r)}</span>}
+                </span>
+                <span role="cell">
+                  {r.kind === 'away' && (
+                    <button type="button" className="link-btn" title="Flag this place as Auckland from now on" onClick={() => markAuckland(r.places)}>It’s in Auckland</button>
+                  )}
+                </span>
+              </div>
+            ))}
+            <div className="oot-row oot-total" role="row">
+              <span role="cell" />
+              <span role="cell">Total</span>
+              <span role="cell" className="oot-count">{total}</span>
+              <span role="cell" className="oot-total-text">{total === 1 ? 'day' : 'days'} on the report for {quarter.label}</span>
+            </div>
           </div>
-        </div>
+
+          <details className="excel-details oot-details">
+            <summary>What was read from your schedule</summary>
+            <p className="oot-hint">
+              {read.filter(w => w.saved).length} of {read.length} weeks in {quarter.label} have a saved schedule. Each day shows what was found there and how it was counted.
+            </p>
+            {storedTwice.map(([w, ids]) => (
+              <p key={w} className="oot-hint">Week of {dayMonth(w)} is saved {ids.length} times ({ids.join(', ')}) — the most recently saved was used.</p>
+            ))}
+            <div className="oot-read">
+              {read.map(w => (
+                <div key={w.weekStart} className="oot-read-week">
+                  <div className="oot-read-head">Week of {dayMonth(w.weekStart)}{!w.saved && ' — nothing saved'}</div>
+                  {w.days.map(d => (
+                    <div key={d.iso} className={`oot-read-day oot-v-${d.verdict}`}>
+                      <span>{tripLabel([d.iso])}</span>
+                      <span>{d.text || '—'}</span>
+                      <span>{VERDICT[d.verdict]}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </details>
+
+          <details className="excel-details oot-details">
+            <summary>Places that count as Auckland</summary>
+            <p className="oot-hint">A record at one of these is flagged “In Auckland”, so it’s easy to untick; anywhere not listed is out of town. Separate them with commas.</p>
+            <textarea
+              className="input"
+              rows={5}
+              aria-label="Places that count as Auckland"
+              value={aucklandText}
+              onChange={e => setAucklandText(e.target.value)}
+            />
+            <button type="button" className="link-btn" onClick={() => setAucklandText(DEFAULT_AUCKLAND)}>Reset to the standard list</button>
+          </details>
+
+          <details className="excel-details oot-details">
+            <summary>Preview the report</summary>
+            <pre className="oot-preview">{report}</pre>
+          </details>
+        </>
       )}
 
       <Toast message={toast} />

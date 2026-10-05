@@ -51,13 +51,13 @@ export function todayIndex(weekStart) {
 // short month names ("Sep" vs "Sept"), and the schedule should read the same everywhere.
 export const WEEK_DAYS  = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 export const DAY_SHORT  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-const MONTHS      = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 /** "28 Sep" */
 export function dayMonth(iso) {
   const d = fromISO(iso)
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`
 }
 
 /** "28 Sep 2026" */

@@ -112,6 +112,96 @@ Import is pressed** — the screen shows what would change first.
 
 ---
 
+## 4c. Out of town report (Out of town tab)
+
+Works out the days the car wasn't available for private use — days at a site or on a course, and
+days the car was in for a service or repair — from the signed-in person's schedule, and downloads
+the **FBT vehicle unavailability report** the managers get: a plain-text file laid out exactly like
+the one already being sent (`src/utils/fbtReport.js`; `tests/fbtReport.test.mjs` pins the layout,
+including "Sept" for September). It is used by one person, so there's no person picker; the
+vehicle is typed once and, like the list of Auckland places, remembered in the browser.
+
+- **Three kinds of record.** *Out of town* (outside Auckland — that's where the person is based),
+  *In Auckland* (a site inside Auckland: NSH, Waitakere, Middlemore…) and *Service / repair* (the
+  car in for a service or repair). Auckland records are **listed too, flagged "In Auckland" and
+  ticked** — the report includes them unless unticked ("Untick them all" does it in one go).
+  `AUCKLAND_PLACES` in `src/utils/outOfTown.js` lists Auckland-region names, and a place is in
+  Auckland when one of them appears in it as whole words ("North Shore Hospital", "Middlemore
+  Install"); anything not listed — a new city, a customer in the Waikato — is out of town with no
+  code change. The list can be edited on the page, and "It's in Auckland" on a record flags a place
+  the list missed. Franklin and Pukekohe are on the list (they're inside the Auckland Council area).
+- **The car in for a service or repair** is written in the day's location in the schedule — "Car
+  service", "Car in for repair", "Cass Office / Car service". A part has to mention the car or
+  vehicle *and* a service/repair word (`isCarWork`), so "A7 service training" isn't taken for it. Such
+  a day becomes a Service / repair record with its own reason line, `Service or repair - car not
+  available for personal use` (`FBT_REASONS` in `src/utils/fbtReport.js` — change the wording there
+  if the managers use another). A service day wins over any place typed on the same day, so each
+  date is in exactly one record.
+- **Quarters are the financial ones**: the year starts in April, so Jul-Sep is "Q2 (Jul-Sep) 2026"
+  and Jan-Mar is Q4, as the report names them. The year is that of the months themselves.
+- **Days are counted by their own date**, not by whichever quarter a week's Monday falls in. A
+  week that crosses the start or end of a quarter is split between the two: Q2 begins on a
+  Wednesday (1 Jul 2026), so Mon–Tue 29–30 Jun are in Q1 and 1–3 Jul in Q2. Every weekday lands in
+  exactly one quarter, so reports for neighbouring quarters never drop or double-count a day
+  (`npm test` checks that over several years).
+- **What counts**: a day at a site or on a course, or the car in for service or repair. Office,
+  remote, work from home, customer calls, non-working days, leave and public holidays don't. A public holiday is recognised
+  however it's typed (`statusOf` in `src/utils/status.js`): left blank, "Public Holiday", by name
+  ("Matariki Day", "Good Friday"), or shortened the way people do ("EASTER", "ANZAC", "Kings
+  birthday NZ", "PH"). Names that can't be a place count wherever they appear; a word that could be
+  one ("Waitangi", "Labour ward") is only the holiday on that holiday's own date (`namesHoliday` in
+  `src/utils/holidays.js`), so a ward is still a ward. A place typed on a holiday still counts —
+  someone was working there.
+- **Records**: consecutive weekdays of the same kind in the same place become one record (the place
+  is its Notes line, then each date); a different place, or a day somewhere else in between, starts
+  another.
+  Each record has a **Location** box (the place from the schedule; it can be changed, and "Use
+  this" puts the schedule's own text back) and an **Additional notes** box for what was done ("DOR
+  install"). The report's Notes line is the two put together on one line, a space between —
+  "Anglesea Day Surgery" + "DOR install" → "Anglesea Day Surgery DOR install" — so any punctuation is
+  typed in the notes; a line under the boxes shows the result. Clear the location and just the
+  additional notes are printed; clear both and it falls back to the schedule's place. A long note
+  wraps in its box but is one line on the report. Notes, ticks and locations are **saved in the
+  browser as they're typed** (`css_oot_trips`), so they survive a reload or a change of quarter.
+  A record is remembered by its first date and place, and only what differs from the schedule is
+  kept. (Notes saved when there was a single box simply show as the location, with the same
+  report text.) Records can also be unticked. The page previews the report text exactly as it
+  will be saved.
+- **Read the way Team week reads**: the person's weeks are found by the `uid` saved inside each
+  schedule, not by guessing the document id, so the two pages always agree; if a week were ever
+  stored twice, the most recently saved copy is used and a warning says so. **What was read from
+  your schedule** lists every weekday as found and how it was counted (out of town / in Auckland /
+  car service-repair / not on the report / blank), which is the quickest way to see why a day isn't
+  on the report.
+
+---
+
+## 4d. Team week grid (desktop)
+
+Team week is an Excel-style grid (`src/hooks/useWeekGrid.js`, with the pure parts in
+`src/utils/gridOps.js`, which `npm test` covers):
+
+- **Select**: click a cell; drag, Shift-click or Shift+arrows for a range; Ctrl+A for everything;
+  Shift+Space / Ctrl+Space for the row / column. The arrows, Home/End, PageUp/PageDown and
+  Ctrl+arrows move, and the page follows the active cell.
+- **Edit**: type straight in (an arrow key then commits and moves on), F2 or double-click to edit
+  what's there. Enter, Shift+Enter and Tab commit and move; Esc drops it; clicking another cell keeps
+  what was typed. Delete clears. Ctrl+Enter puts what you typed into every selected cell.
+- **Copy, cut, paste**: Ctrl+C / Ctrl+X / Ctrl+V, to and from Excel itself. What was copied or cut is
+  outlined until Esc or the next edit. A cut moves — the old cells empty when it's pasted — and going to
+  another week, or changing who's listed, forgets it. One copied cell fills a selected range; a block
+  repeats across a selection that is a whole number of blocks.
+- **Fill**: drag the small square on the corner of the selection (down, up, left or right, repeating
+  what's selected), or Ctrl+D to fill down.
+- **Undo / redo**: Ctrl+Z / Ctrl+Y step back and forward through the changes made to the week on
+  screen. They aren't offered after a failed save, since what's on screen has then been put back.
+- **Saving**: a change shows at once and is saved in the background, one person's week at a time and
+  always with that person's latest days, so quick typing can't overwrite itself. If a save fails the
+  cells go back and a message says so; closing the page while a save is still on its way asks first.
+- People who aren't admins can edit only their own row — pasting over somebody else's is refused.
+
+---
+
 ## 5. Local development
 
 ```bash
