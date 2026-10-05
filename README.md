@@ -114,28 +114,39 @@ Import is pressed** — the screen shows what would change first.
 
 ## 4c. Out of town report (Out of town tab)
 
-Counts each person's days at a site or on a course from their schedule, one row per week, and
-downloads the Excel people send their manager (`src/utils/outOfTown.js`, `outOfTownExcel.js`).
+Works out the days the signed-in person spent out of Auckland from their schedule, and downloads
+the **FBT vehicle unavailability report** the managers get: a plain-text file laid out exactly like
+the one already being sent (`src/utils/fbtReport.js`; `tests/fbtReport.test.mjs` pins the layout,
+including "Sept" for September). It is used by one person, so there's no person picker; the
+vehicle is typed once and, like the list of Auckland places, remembered in the browser.
 
-- **A quarter is its months** — "Jul – Sep 2026", the way the manager's request words it — so
-  it never matters whether someone's "Q3" is a calendar or a financial one. The quarters are the
-  calendar ones (Jan – Mar, Apr – Jun, Jul – Sep, Oct – Dec).
+- **Out of town means out of Auckland** — that's where the person is based. A day at a site inside
+  Auckland (NSH, Waitakere, Middlemore…) doesn't count. `AUCKLAND_PLACES` in
+  `src/utils/outOfTown.js` lists Auckland-region names, and a place is in Auckland when one of them
+  appears in it as whole words ("North Shore Hospital", "Middlemore Install"). Anything not listed
+  — a new city, a customer in the Waikato — counts as out of town with no code change. The page
+  shows the days it skipped, lets the list be edited, and has an "It's in Auckland" link on each
+  record for a place the list missed. Franklin and Pukekohe are on the list (they're inside the
+  Auckland Council area); take them off if those trips should count.
+- **Quarters are the financial ones**: the year starts in April, so Jul-Sep is "Q2 (Jul-Sep) 2026"
+  and Jan-Mar is Q4, as the report names them. The year is that of the months themselves.
 - **Days are counted by their own date**, not by whichever quarter a week's Monday falls in. A
-  week that crosses the start or end of a quarter is split between the two: Jul – Sep 2026 begins
-  on a Wednesday, so its first row reads "01/07/2026 · Wed–Fri only" (Mon–Tue are in Apr – Jun) and
-  its last, "28/09/2026 · Mon–Wed only" (1–2 Oct are in Oct – Dec). Every weekday lands in exactly
-  one quarter, so reports for neighbouring quarters never drop or double-count a day (`npm test`
-  checks that over several years). The Excel dates every row inside its quarter too.
-- **What counts**: a site visit or a course/training. Office, remote, work from home, customer
-  calls, non-working days and public holidays don't, and leave only when "Count leave days" is on.
-  A public holiday is recognised however it's typed (`statusOf` in `src/utils/status.js`): left
-  blank, "Public Holiday", by name ("Matariki Day", "Good Friday"), or shortened the way people
-  do ("EASTER", "ANZAC", "Kings birthday NZ", "PH"). Names that can't be a place count wherever
-  they appear; a word that could be one ("Waitangi", "Labour ward") is only the holiday on that
-  holiday's own date (`namesHoliday` in `src/utils/holidays.js`), so a ward is still a ward. A
-  place typed on a holiday still counts — someone was working there.
-- Each week can be corrected on screen before downloading (a part-week can't be given more days
-  than it has inside the quarter). Corrections are dropped when the quarter or the person changes.
+  week that crosses the start or end of a quarter is split between the two: Q2 begins on a
+  Wednesday (1 Jul 2026), so Mon–Tue 29–30 Jun are in Q1 and 1–3 Jul in Q2. Every weekday lands in
+  exactly one quarter, so reports for neighbouring quarters never drop or double-count a day
+  (`npm test` checks that over several years).
+- **What counts**: a day at a site or on a course outside Auckland. Office, remote, work from home,
+  customer calls, non-working days, leave and public holidays don't. A public holiday is recognised
+  however it's typed (`statusOf` in `src/utils/status.js`): left blank, "Public Holiday", by name
+  ("Matariki Day", "Good Friday"), or shortened the way people do ("EASTER", "ANZAC", "Kings
+  birthday NZ", "PH"). Names that can't be a place count wherever they appear; a word that could be
+  one ("Waitangi", "Labour ward") is only the holiday on that holiday's own date (`namesHoliday` in
+  `src/utils/holidays.js`), so a ward is still a ward. A place typed on a holiday still counts —
+  someone was working there.
+- **Records**: consecutive weekdays in the same place become one record (the place is its Notes
+  line, then each date); a different place, or a day somewhere else in between, starts another.
+  Each record can be unticked or have its notes edited before downloading; edits are dropped when
+  the quarter changes. The page also previews the report text exactly as it will be saved.
 
 ---
 
