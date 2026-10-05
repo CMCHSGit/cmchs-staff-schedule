@@ -86,6 +86,53 @@ export function awayDays(slices, schedules, { aucklandPlaces = AUCKLAND_PLACES }
   return { away, skipped }
 }
 
+/**
+ * Every weekday of the given weeks as it was read from the schedule and how it was
+ * treated, so a day that isn't on the report can be explained: one entry per week,
+ * { weekStart, saved, days } — `days` is empty when nothing is saved for that week,
+ * otherwise { iso, text, verdict } per weekday in the quarter, where verdict is
+ * 'away' (counted), 'auckland' (a site in Auckland), 'no' (anything else) or 'blank'.
+ */
+export function readDays(slices, schedules, { aucklandPlaces = AUCKLAND_PLACES } = {}) {
+  const local = aucklandMatcher(aucklandPlaces)
+  return slices.map(s => {
+    const saved = !!schedules?.[s.weekStart]
+    if (!saved) return { weekStart: s.weekStart, saved, days: [] }
+    const days = normalizeSchedule(schedules[s.weekStart])
+    return {
+      weekStart: s.weekStart,
+      saved,
+      days: s.indices.map(i => {
+        const iso = addDaysISO(s.weekStart, i)
+        const text = (days[i].location || '').trim()
+        const places = awayPlaces(days[i], { holiday: holidayOn(iso) })
+        const outside = places.filter(p => !local(p))
+        return { iso, text, verdict: !text ? 'blank' : outside.length ? 'away' : places.length ? 'auckland' : 'no' }
+      }),
+    }
+  })
+}
+
+/**
+ * One saved schedule per week out of everything stored under a person: { schedules, copies }.
+ * Normally a week is one document; if there are ever two, the most recently saved is used
+ * and `copies` lists those weeks ([[weekStart, [ids…]]]) so it can be pointed out.
+ */
+export function chooseSchedules(docs) {
+  const savedAt = d => d.submittedAt?.toMillis?.() ?? d.importedAt?.toMillis?.() ?? 0
+  const best = new Map()
+  const ids = new Map()
+  for (const d of docs) {
+    ids.set(d.weekStart, [...(ids.get(d.weekStart) || []), d.id])
+    const have = best.get(d.weekStart)
+    if (!have || savedAt(d) >= savedAt(have)) best.set(d.weekStart, d)
+  }
+  return {
+    schedules: Object.fromEntries([...best].map(([weekStart, d]) => [weekStart, d.days || null])),
+    copies: [...ids].filter(([, list]) => list.length > 1),
+  }
+}
+
 const isWeekend = iso => [0, 6].includes(fromISO(iso).getDay())
 const nextWeekday = iso => { let d = addDaysISO(iso, 1); while (isWeekend(d)) d = addDaysISO(d, 1); return d }
 

@@ -116,6 +116,12 @@
 .oot-empty { padding: 24px 16px; text-align: center; color: var(--text-muted); font: var(--type-body); }
 .oot-details p { margin: 8px 0; }
 .oot-details textarea { margin-bottom: 6px; }
+.oot-read { max-height: 360px; overflow-y: auto; margin-top: 8px; }
+.oot-read-head { margin-top: 6px; padding: 6px 0 2px; border-top: 1px solid var(--border-subtle); font: var(--weight-semibold) 13px/1.4 var(--font-body); color: var(--text-strong); }
+.oot-read-week:first-child .oot-read-head { margin-top: 0; border-top: none; }
+.oot-read-day { display: grid; grid-template-columns: 140px minmax(0, 1fr) 120px; gap: 8px; padding: 2px 0; font: var(--type-body-sm); color: var(--text-body); }
+.oot-v-away { color: var(--text-strong); font-weight: 600; }
+.oot-v-blank { color: var(--text-muted); }
 .oot-preview { margin: 8px 0 0; padding: 12px; overflow-x: auto; background: var(--surface-subtle); border-radius: var(--radius-md); font: 13px/1.5 var(--font-mono); color: var(--text-body); white-space: pre; }
 @media (max-width: 759.98px) {
   .oot-row { grid-template-columns: 24px minmax(0, 1fr) 40px; gap: 6px 10px; padding: 8px 10px; }
@@ -123,6 +129,7 @@
   .oot-head > :nth-child(4), .oot-head > :nth-child(5) { display: none; }
   .oot-download { margin-left: 0; width: 100%; }
   .oot-vehicle { max-width: none; }
+  .oot-read-day { grid-template-columns: 112px minmax(0, 1fr) 84px; gap: 6px; }
 }
 
 html, body, #root { min-height: 100%; }

@@ -147,6 +147,11 @@ vehicle is typed once and, like the list of Auckland places, remembered in the b
   line, then each date); a different place, or a day somewhere else in between, starts another.
   Each record can be unticked or have its notes edited before downloading; edits are dropped when
   the quarter changes. The page also previews the report text exactly as it will be saved.
+- **Read the way Team week reads**: the person's weeks are found by the `uid` saved inside each
+  schedule, not by guessing the document id, so the two pages always agree; if a week were ever
+  stored twice, the most recently saved copy is used and a warning says so. **What was read from
+  your schedule** lists every weekday as found and how it was counted (out of town / in Auckland /
+  not out of town / blank), which is the quickest way to see why a day isn't on the report.
 
 ---
 

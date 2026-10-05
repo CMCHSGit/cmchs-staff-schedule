@@ -4,8 +4,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  AUCKLAND_PLACES, awayDays, awayPlaces, describeQuarter, inAuckland, parsePlaces,
-  quarterOf, quarterSlices, recentQuarters, tripLabel, tripsOf,
+  AUCKLAND_PLACES, awayDays, awayPlaces, chooseSchedules, describeQuarter, inAuckland, parsePlaces,
+  quarterOf, quarterSlices, readDays, recentQuarters, tripLabel, tripsOf,
 } from '../src/utils/outOfTown.js'
 import { statusOf, describeDay } from '../src/utils/status.js'
 import { holidayOn } from '../src/utils/holidays.js'
@@ -165,6 +165,43 @@ test('a trip carries on over a weekend, but not over a day back in the office', 
 
 test('the same place written two ways is still one trip', () => {
   assert.deepEqual(tripsOf([day('2026-08-10', 'Dunedin'), day('2026-08-11', 'DUNEDIN')]).map(t => t.dates.length), [2])
+})
+
+test('two days in the same place with a day in the office between are two records, and both are counted', () => {
+  // Mon 24 and Wed 26 Aug 2026 at the same site, the rest of the week in the office
+  const days = inQuarter(Q2, { '2026-08-24': week('Anglesea', 'Cass Office', 'Anglesea', 'Cass Office', 'Cass Office') })
+  assert.deepEqual(days.away.map(d => d.iso), ['2026-08-24', '2026-08-26'])
+  const trips = tripsOf(days.away)
+  assert.deepEqual(trips.map(t => [tripLabel(t.dates), t.dates.length, t.notes]), [['Mon 24 Aug 2026', 1, 'Anglesea'], ['Wed 26 Aug 2026', 1, 'Anglesea']])
+  assert.equal(trips.reduce((n, t) => n + t.dates.length, 0), 2)
+})
+
+test('the read-out shows every weekday of a saved week and how each was counted', () => {
+  const out = readDays(quarterSlices(Q2), { '2026-08-24': week('Anglesea', 'Cass Office', 'Anglesea', '', 'NSH') })
+  assert.deepEqual(out.find(w => w.weekStart === '2026-08-24').days.map(d => [d.iso, d.text, d.verdict]), [
+    ['2026-08-24', 'Anglesea', 'away'], ['2026-08-25', 'Cass Office', 'no'], ['2026-08-26', 'Anglesea', 'away'],
+    ['2026-08-27', '', 'blank'], ['2026-08-28', 'NSH', 'auckland'],
+  ])
+  assert.deepEqual(out.find(w => w.weekStart === '2026-08-17'), { weekStart: '2026-08-17', saved: false, days: [] }) // nothing saved
+  assert.equal(out.length, 14)
+  // a holiday typed by name is "not out of town", not a place
+  const holiday = readDays(quarterSlices(describeQuarter(2026, 2)), { '2026-03-30': week('', '', '', '', 'EASTER') })
+  assert.equal(holiday[0].days.at(-1).verdict, 'no')
+})
+
+test('a week stored twice uses the most recently saved copy, and says so', () => {
+  const stamp = ms => ({ toMillis: () => ms })
+  const monday = week('Anglesea', '', '', '', '')
+  const both = week('Anglesea', '', 'Anglesea', '', '')
+  const chosen = chooseSchedules([
+    { id: 'old', weekStart: '2026-08-24', days: monday, submittedAt: stamp(100) },
+    { id: 'new', weekStart: '2026-08-24', days: both, submittedAt: stamp(200) },
+    { id: 'imported', weekStart: '2026-08-31', days: monday, importedAt: stamp(50) },
+  ])
+  assert.deepEqual(chosen.schedules['2026-08-24'], both)
+  assert.deepEqual(chosen.copies, [['2026-08-24', ['old', 'new']]])
+  assert.deepEqual(Object.keys(chosen.schedules).sort(), ['2026-08-24', '2026-08-31'])
+  assert.deepEqual(chooseSchedules([]), { schedules: {}, copies: [] })
 })
 
 test('a record’s dates read for the screen', () => {

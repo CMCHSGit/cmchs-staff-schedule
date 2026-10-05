@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { doc, getDoc } from 'firebase/firestore'
-import { Download } from 'lucide-react'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { Download, TriangleAlert } from 'lucide-react'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { scheduleId, dayMonth } from '../utils/week'
-import { AUCKLAND_PLACES, awayDays, parsePlaces, quarterSlices, recentQuarters, tripLabel, tripsOf } from '../utils/outOfTown'
+import { dayMonth } from '../utils/week'
+import { AUCKLAND_PLACES, awayDays, chooseSchedules, parsePlaces, quarterSlices, readDays, recentQuarters, tripLabel, tripsOf } from '../utils/outOfTown'
 import { downloadFbtReport, fbtReport } from '../utils/fbtReport'
 import Toast, { useToast } from '../components/Toast'
-import { Button, Loading } from '../components/ui'
+import { Alert, Button, Loading } from '../components/ui'
 
 const VEHICLE_KEY = 'css_oot_vehicle'
 const AUCKLAND_KEY = 'css_oot_auckland'
 const DEFAULT_AUCKLAND = AUCKLAND_PLACES.join(', ')
+const VERDICT = { away: 'Out of town', auckland: 'In Auckland', no: 'Not out of town', blank: '' }
 
 /** A string kept in this browser, so the vehicle and the Auckland list are typed once. */
 function useRemembered(key, fallback) {
@@ -35,25 +36,34 @@ export default function OutOfTown() {
   const [vehicle, setVehicle] = useRemembered(VEHICLE_KEY, '')
   const [aucklandText, setAucklandText] = useRemembered(AUCKLAND_KEY, DEFAULT_AUCKLAND)
   const [schedules, setSchedules] = useState(null) // { [weekStart]: days }
+  const [copies, setCopies] = useState([])         // weeks stored more than once: [[weekStart, [ids]]]
   const [edits, setEdits] = useState({})           // { [trip id]: { include?, notes? } }
   const [toast, showToast] = useToast()
 
   const quarter = quarters[quarterIdx]
   const slices = useMemo(() => quarterSlices(quarter), [quarter])
-  const weekStarts = useMemo(() => slices.map(s => s.weekStart), [slices])
   const aucklandPlaces = useMemo(() => parsePlaces(aucklandText), [aucklandText])
 
+  // Read this person's weeks the way Team week does — by the uid saved inside each one —
+  // so what the report counts is always what Team week shows.
   useEffect(() => {
     let cancelled = false
     setSchedules(null)
     setEdits({})
-    Promise.all(weekStarts.map(w => getDoc(doc(db, 'schedules', scheduleId(w, user.uid))).then(s => [w, s.exists() ? s.data().days : null])))
-      .then(entries => { if (!cancelled) setSchedules(Object.fromEntries(entries)) })
-      .catch(e => { console.error(e); if (!cancelled) setSchedules({}) })
+    getDocs(query(collection(db, 'schedules'), where('uid', '==', user.uid)))
+      .then(snap => {
+        if (cancelled) return
+        const chosen = chooseSchedules(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        setSchedules(chosen.schedules)
+        setCopies(chosen.copies)
+      })
+      .catch(e => { console.error(e); if (!cancelled) { setSchedules({}); setCopies([]) } })
     return () => { cancelled = true }
-  }, [weekStarts, user.uid])
+  }, [quarter, user.uid])
 
   const { away, skipped } = useMemo(() => awayDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
+  const read = useMemo(() => readDays(slices, schedules, { aucklandPlaces }), [slices, schedules, aucklandPlaces])
+  const storedTwice = copies.filter(([w]) => slices.some(s => s.weekStart === w))
   const rows = useMemo(() => tripsOf(away).map(t => {
     const id = `${t.dates[0]}|${t.key}`
     const e = edits[id] || {}
@@ -123,6 +133,11 @@ export default function OutOfTown() {
 
       {!schedules ? <Loading /> : (
         <>
+          {storedTwice.length > 0 && (
+            <Alert tone="warning" icon={<TriangleAlert size={20} />} title="A week is stored more than once">
+              {storedTwice.map(([w]) => `Week of ${dayMonth(w)}`).join(', ')} — the most recently saved copy was used. “What was read from your schedule” below shows which.
+            </Alert>
+          )}
           <div className="card oot-table" role="table" aria-label={`Days out of Auckland, ${quarter.label}`}>
             <div className="oot-row oot-head" role="row">
               <span role="columnheader" />
@@ -172,6 +187,30 @@ export default function OutOfTown() {
             {skipped.length
               ? <ul>{skipped.map(s => <li key={s.iso}>{tripLabel([s.iso])} — {s.places.join(', ')}</li>)}</ul>
               : <p className="oot-hint">No days at a site inside Auckland this quarter.</p>}
+          </details>
+
+          <details className="excel-details oot-details">
+            <summary>What was read from your schedule</summary>
+            <p className="oot-hint">
+              {read.filter(w => w.saved).length} of {read.length} weeks in {quarter.label} have a saved schedule. Each day shows what was found there and how it was counted.
+            </p>
+            {storedTwice.map(([w, ids]) => (
+              <p key={w} className="oot-hint">Week of {dayMonth(w)} is saved {ids.length} times ({ids.join(', ')}) — the most recently saved was used.</p>
+            ))}
+            <div className="oot-read">
+              {read.map(w => (
+                <div key={w.weekStart} className="oot-read-week">
+                  <div className="oot-read-head">Week of {dayMonth(w.weekStart)}{!w.saved && ' — nothing saved'}</div>
+                  {w.days.map(d => (
+                    <div key={d.iso} className={`oot-read-day oot-v-${d.verdict}`}>
+                      <span>{tripLabel([d.iso])}</span>
+                      <span>{d.text || '—'}</span>
+                      <span>{VERDICT[d.verdict]}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </details>
 
           <details className="excel-details oot-details">
