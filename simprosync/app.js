@@ -148,11 +148,20 @@ export function startApp({ transport, who }) {
     if (!book) { row.hidden = true; return; }
     let anyColumn = false;
     for (const sr of getCheckedSheets()) {
-      const { header, recs } = SyncCore.toRecords(await book.rows(sr.idx));
-      const warrantyKey = header.find(h => h.trim().toLowerCase() === 'extended warranty');
+      // Ticked sheets aren't necessarily asset lists at all (e.g. a
+      // "Reference"/"Networking" tab) - read defensively so one odd sheet
+      // can't break the scan for the rest, or block the file loading at all.
+      let header, recs;
+      try { ({ header, recs } = SyncCore.toRecords(await book.rows(sr.idx))); }
+      catch (e) { continue; }
+      // header can contain holes (a header row with a skipped/blank cell is
+      // a real gap in the array, not an empty string) - Array.find() visits
+      // holes as undefined, unlike the map()/forEach() toRecords() itself
+      // uses, so h must be guarded before calling .trim() on it.
+      const warrantyKey = header.find(h => h && h.trim().toLowerCase() === 'extended warranty');
       if (!warrantyKey) continue;
       anyColumn = true;
-      const serialKey = header.find(h => h.trim().toLowerCase() === SyncCore.MATCH_FIELD.toLowerCase());
+      const serialKey = header.find(h => h && h.trim().toLowerCase() === SyncCore.MATCH_FIELD.toLowerCase());
       if (!serialKey) continue;
       recs.forEach(({ r }) => {
         if (SyncCore.asText(r[warrantyKey]).trim().toLowerCase() !== 'yes') return;
