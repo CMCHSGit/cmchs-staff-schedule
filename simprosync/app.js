@@ -20,6 +20,7 @@ export function startApp({ transport, who }) {
   let book = null, fileName = '', plan = null, logLines = [];
   let busy = false;
   let assetTypes = []; // [{ID, Name}] from Simpro, for the selected company
+  let warrantySerials = new Set(); // serials with "Extended Warranty" = Yes, across ticked sheets
 
   /* ---------- logging & progress ---------- */
   function log(msg) { logLines.push(msg); $('log').textContent = logLines.join('\n'); }
@@ -122,7 +123,7 @@ export function startApp({ transport, who }) {
         <select class="sheet-type" style="flex:1;min-width:140px">${assetTypeOptionsHtml(tid)}</select>
       </div>`;
     }).join('');
-    el.querySelectorAll('.sheet-chk, .sheet-type').forEach(input => input.addEventListener('change', () => { resetResults(); updateButtons(); }));
+    el.querySelectorAll('.sheet-chk, .sheet-type').forEach(input => input.addEventListener('change', () => { resetResults(); updateButtons(); refreshWarrantyFilter(); }));
     updateButtons();
   }
   function getCheckedSheets() {
@@ -136,6 +137,34 @@ export function startApp({ transport, who }) {
       });
   }
 
+  // Scans every ticked sheet for an "Extended Warranty" column and collects
+  // the Serial Number of every row where it's "Yes" - lets "only sync
+  // warranty items" be a single checkbox instead of hand-typing/pasting
+  // every serial into the free-text filter next to it. Silent no-op (and
+  // the checkbox stays hidden) if no ticked sheet has that column at all.
+  async function refreshWarrantyFilter() {
+    const row = $('warrantyFilterRow'), chk = $('onlyWarranty'), countEl = $('warrantyCount');
+    warrantySerials = new Set();
+    if (!book) { row.hidden = true; return; }
+    let anyColumn = false;
+    for (const sr of getCheckedSheets()) {
+      const { header, recs } = SyncCore.toRecords(await book.rows(sr.idx));
+      const warrantyKey = header.find(h => h.trim().toLowerCase() === 'extended warranty');
+      if (!warrantyKey) continue;
+      anyColumn = true;
+      const serialKey = header.find(h => h.trim().toLowerCase() === SyncCore.MATCH_FIELD.toLowerCase());
+      if (!serialKey) continue;
+      recs.forEach(({ r }) => {
+        if (SyncCore.asText(r[warrantyKey]).trim().toLowerCase() !== 'yes') return;
+        const ser = SyncCore.asText(r[serialKey]).trim().toUpperCase();
+        if (ser) warrantySerials.add(ser);
+      });
+    }
+    row.hidden = !anyColumn;
+    if (!anyColumn) { chk.checked = false; return; }
+    countEl.textContent = `(${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} found)`;
+  }
+
   /* ---------- file ---------- */
   async function takeFile(f) {
     if (!f) return;
@@ -146,6 +175,7 @@ export function startApp({ transport, who }) {
       renderSheetRows();
       $('fileName').textContent = f.name;
       $('fileInfo').hidden = false; $('drop').classList.add('has-file');
+      await refreshWarrantyFilter();
     } catch (e) { book = null; showError('Could not read that file: ' + e.message + ' (if it is open in Excel with unsaved changes, save it first).'); }
     updateButtons();
   }
@@ -155,6 +185,7 @@ export function startApp({ transport, who }) {
   drop.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
   $('file').onchange = e => { takeFile(e.target.files[0]); e.target.value = ''; };
   $('only').oninput = resetResults;
+  $('onlyWarranty').onchange = resetResults;
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => e.preventDefault());
 
@@ -231,16 +262,25 @@ export function startApp({ transport, who }) {
     showError(''); resetResults(); logLines = []; setBusy(true);
     const cid = $('company').value;
     const sheets = getCheckedSheets();
-    const only = $('only').value.trim() ? new Set($('only').value.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean)) : null;
+    const manualOnly = $('only').value.trim() ? $('only').value.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+    const useWarranty = $('onlyWarranty').checked && warrantySerials.size > 0;
+    const only = (manualOnly.length || useWarranty) ? new Set([...manualOnly, ...(useWarranty ? warrantySerials : [])]) : null;
     const stamp = new Date();
     if (!sheets.length) { showError('Tick at least one sheet to sync.'); progressDone(); setBusy(false); return; }
     try {
-      log(`DRY RUN | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : ''));
+      log(`DRY RUN | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}${useWarranty ? ' (includes Extended Warranty = Yes)' : ''}` : ''));
 
       const creates = [], changes = [], warnings = [], simproOnly = [], simproErrors = [], dupes = [], unmapped = [];
       let unchanged = 0;
       const combinedExisting = new Map(); // site|serial -> {id, values} - for job-attach lookups, across all sheets
       const combinedJobs = new Map();     // jobNo -> items[] - merged across sheets
+      // Two sheets very often share a site (same customer's Monitors + IT
+      // lists) or, less often, a type - without these, each sheet redid the
+      // same "fetch every asset at this site" / "fetch this type's field
+      // definitions" work from scratch, doubling (or worse) Simpro traffic
+      // for no reason.
+      const siteAssetsCache = new Map(); // site -> raw unfiltered assets[]
+      const fieldDefsCache = new Map();  // tid -> {lowercaseName: fieldDef}
 
       for (const sr of sheets) {
         progress(`Reading sheet "${sr.name}"…`);
@@ -248,13 +288,17 @@ export function startApp({ transport, who }) {
         log(`\n--- "${sr.name}" (${sr.typeName}) --- rows with data: ${recs.length}`);
         if (!recs.length) { log('  (no data rows - skipped)'); continue; }
 
-        progress(`Reading ${sr.typeName} fields from Simpro…`);
-        const fields = await getAll(`/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/`);
-        const fdefList = await pool(fields, 4, async f => {
-          const { status, data } = await call('GET', `/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/${f.ID}`);
-          return status === 200 ? data : f;
-        });
-        const fdef = {}; fdefList.forEach(f => { fdef[f.Name.trim().toLowerCase()] = f; });
+        let fdef = fieldDefsCache.get(sr.tid);
+        if (!fdef) {
+          progress(`Reading ${sr.typeName} fields from Simpro…`);
+          const fields = await getAll(`/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/`);
+          const fdefList = await pool(fields, 4, async f => {
+            const { status, data } = await call('GET', `/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/${f.ID}`);
+            return status === 200 ? data : f;
+          });
+          fdef = {}; fdefList.forEach(f => { fdef[f.Name.trim().toLowerCase()] = f; });
+          fieldDefsCache.set(sr.tid, fdef);
+        }
         const { mapped, unmapped: sheetUnmapped } = SyncCore.mapColumns(header, fdef);
         log(`  Columns mapped to Simpro fields: ${Object.keys(mapped).length}`);
         if (sheetUnmapped.length) { log(`  Columns with NO matching Simpro field (ignored): ${sheetUnmapped.join(', ')}`); unmapped.push(...sheetUnmapped.map(u => `${sr.name}: ${u}`)); }
@@ -269,8 +313,13 @@ export function startApp({ transport, who }) {
         const sheetExisting = new Map();
         for (const site of sites) {
           if (!/^\d+$/.test(site)) { log(`  Skipping rows with bad Site ID "${site}"`); continue; }
-          progress(`Finding ${sr.typeName} assets on site ${site}…`);
-          const assets = (await getAll(`/companies/${cid}/sites/${site}/assets/`)).filter(a => String((a.AssetType || {}).ID) === String(sr.tid) && !a.Archived);
+          let siteAssets = siteAssetsCache.get(site);
+          if (!siteAssets) {
+            progress(`Finding assets on site ${site}…`);
+            siteAssets = await getAll(`/companies/${cid}/sites/${site}/assets/`);
+            siteAssetsCache.set(site, siteAssets);
+          }
+          const assets = siteAssets.filter(a => String((a.AssetType || {}).ID) === String(sr.tid) && !a.Archived);
           log(`  Site ${site}: ${assets.length} ${sr.typeName} assets in Simpro`);
           const cfs = await pool(assets, 10, async a => {
             const { status, data } = await call('GET', `/companies/${cid}/sites/${site}/assets/${a.ID}/customFields/?pageSize=250`);
