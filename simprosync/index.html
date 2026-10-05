@@ -30,6 +30,7 @@ main{max-width:1100px;margin:0 auto;padding:22px 28px 60px;display:grid;gap:16px
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
 .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 12px}
 .row{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+.sheetrow{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--bg)}
 label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:180px;flex:1}
 select,input[type=text]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
 button,.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:6px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
@@ -104,7 +105,6 @@ body.busy{cursor:progress}
     <h2>Setup</h2>
     <div class="row">
       <label class="f">Simpro company<select id="company"><option>Loading…</option></select></label>
-      <label class="f">Asset type<select id="assetType"></select></label>
     </div>
     <p class="help">Signed in with Microsoft. Simpro requests are relayed through the equipment tracker's Apps Script proxy - the Simpro key never reaches this page. Reports record who ran each sync.</p>
   </section>
@@ -116,10 +116,13 @@ body.busy{cursor:progress}
     <div id="fileInfo" hidden>
       <div class="row">
         <label class="f">File<span id="fileName"></span></label>
-        <label class="f">Sheet<select id="sheet"></select></label>
         <label class="f">Only these serials (optional)<input type="text" id="only" placeholder="e.g. FP5-69036350, FP5-69036347"></label>
       </div>
-      <div class="actions" style="margin-top:14px"><button class="primary" id="runDry">Run dry run</button><span class="muted">Reads Simpro and compares. Nothing is changed.</span></div>
+      <div style="margin-top:10px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Sheets to sync — tick which ones, and check each one's Simpro asset type</div>
+        <div id="sheetPicker" style="display:grid;gap:6px"></div>
+      </div>
+      <div class="actions" style="margin-top:14px"><button class="primary" id="runDry">Run dry run</button><span class="muted">Reads Simpro and compares. Nothing is changed. Ticked sheets run together as one combined report.</span></div>
     </div>
   </section>
 
