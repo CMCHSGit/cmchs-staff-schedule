@@ -491,27 +491,36 @@ export function startApp({ transport, who }) {
       return x.status === 'ok';
     };
     try {
-      // Every setField/create/attach call below goes through the same
-      // batching transport (main.js) - it only actually combines calls that
-      // land in the same tick, so running a field's worth of PATCHes (or a
-      // job's worth of attaches) via Promise.all, instead of one `await` at
-      // a time in a for-loop, is what lets the batcher do its job at all.
-      // This used to be sequential throughout, which meant every single
-      // field/attach paid its own ~1.5s Apps Script round trip one at a
-      // time - the actual cause of the reported "30-60s per asset" slowdown,
-      // not the batching mechanism itself (which was already fine).
-      await pool(p.changes, 8, async c => {
-        const results = await Promise.all(c.changes.map(x => setField(c.site, c.id, x)));
-        if (results.every(Boolean)) updated++;
+      // Concurrency model, and why it is this specific shape:
+      //
+      // Calls are batched by main.js's transport (up to 25 per proxy round
+      // trip), so work has to be issued concurrently or every call pays its
+      // own ~1.5s round trip - that was the original "30-60s per asset".
+      // BUT two PATCHes to the SAME asset must never be in flight together:
+      // Simpro answers both 200 while silently losing one of the values. A
+      // run that reported 164/164 fields "ok" came back on the next preview
+      // with 37 of them still blank across 10 assets, and an asset whose
+      // Serial Number write is the one lost reappears as "to create",
+      // duplicating it.
+      //
+      // So: one in-flight call per asset (fields strictly sequential within
+      // an asset), many assets at once. Batches stay full because they're
+      // filled by DIFFERENT assets, which don't collide. Job attaches are
+      // left parallel - they're separate assets going onto one cost centre
+      // and verified fine (45 of 47 already attached on the re-check).
+      await pool(p.changes, 25, async c => {
+        let ok = true;
+        for (const x of c.changes) ok = (await setField(c.site, c.id, x)) && ok;
+        if (ok) updated++;
         progress(`Applying… ${++done} of ${total}`, done, total);
       }, () => {});
-      await pool(p.creates, 8, async c => {
+      await pool(p.creates, 25, async c => {
         const start = SyncCore.asDateIso(c.r['Date Installed']) || new Date().toISOString().slice(0, 10);
         const { status, data } = await call('POST', `/companies/${p.cid}/sites/${c.site}/assets/`, { AssetType: +c.tid, StartDate: start });
         if (!(status === 200 || status === 201) || !data || !data.ID) { errors++; c.error = true; log(`  ERROR creating ${c.ser} (row ${c.rownum}, ${c.sheet}): ${status} ${brief(data)}`); }
         else {
           c.newId = data.ID; added++;
-          await Promise.all(c.changes.map(x => setField(c.site, c.newId, x)));
+          for (const x of c.changes) await setField(c.site, c.newId, x);
           log(`  created asset ${c.newId} for ${c.ser} (${c.sheet})`);
         }
         progress(`Applying… ${++done} of ${total}`, done, total);
