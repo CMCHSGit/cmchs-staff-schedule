@@ -219,7 +219,7 @@ export function startApp({ transport, who }) {
   const plainNotes = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
   // Everything ending up attached when the job closes (new this run, plus
   // already-attached from an earlier run, possibly spanning more than one
-  // sheet - see combinedJobs in the dry run below) - one line per asset,
+  // sheet - see combinedJobs in the preview below) - one line per asset,
   // model omitted (just the serial) for a sheet with no "Model" column. One
   // <div> with <br> between items, not a <div> per item - matches the
   // single <div> the "EST and PVT completed" note already uses below, and
@@ -275,10 +275,10 @@ export function startApp({ transport, who }) {
   const okJobs = p => (p.jobPlans || []).filter(j => !j.problems.length);
   const actionCount = p => p.creates.length + p.changes.length + okJobs(p).length;
 
-  /* ---------- dry run ----------
+  /* ---------- preview ----------
      Runs every ticked sheet in turn, each against its own asset type's
      Simpro fields and existing-asset lookup, then merges everything into
-     one combined plan - one dry run / one Apply for the whole workbook
+     one combined plan - one preview / one Apply for the whole workbook
      instead of one pass per sheet. A job number referenced from more than
      one sheet (e.g. the same shipment carries both Monitors and IT items)
      is merged into a single job plan too, so it only gets attached-to and
@@ -297,7 +297,7 @@ export function startApp({ transport, who }) {
     const stamp = new Date();
     if (!sheets.length) { showError('Tick at least one sheet to sync.'); progressDone(); setBusy(false); return; }
     try {
-      log(`DRY RUN | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : '') + ($('onlyWarranty').checked ? ' | job notes: Extended Warranty items only' : ''));
+      log(`PREVIEW | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : '') + ($('onlyWarranty').checked ? ' | job notes: Extended Warranty items only' : ''));
 
       const creates = [], changes = [], warnings = [], simproOnly = [], simproErrors = [], dupes = [], unmapped = [];
       let unchanged = 0;
@@ -399,7 +399,7 @@ export function startApp({ transport, who }) {
       log(`Warnings: ${warnings.length}`);
       warnings.forEach(w => log(`  ${w.sheet ? '[' + w.sheet + '] ' : ''}Row ${w.row} ${w.serial}: ${w.msg}`));
       if (simproErrors.length) { log(`Excel errors already stored in Simpro: ${simproErrors.length}`); simproErrors.forEach(e => log(`  ${e.ser || '(no serial)'} (asset ${e.id}) ${e.field} = ${e.value}`)); }
-      log('\nDry run only - nothing was changed in Simpro.');
+      log('\nPreview only - nothing was changed in Simpro.');
       renderResults();
     } catch (e) { showError(e.message); log('STOPPED: ' + e.message); }
     progressDone(); setBusy(false);
@@ -420,7 +420,7 @@ export function startApp({ transport, who }) {
       (p.jobPlans.length ? tile(okJobs(p).length, `job${okJobs(p).length === 1 ? '' : 's'} to complete<small>${okJobs(p).reduce((n, j) => n + j.attach.length, 0)} assets to attach${p.jobPlans.length - okJobs(p).length ? ` · ${p.jobPlans.length - okJobs(p).length} with problems` : ''}</small>`, p.jobPlans.length - okJobs(p).length ? 'warn' : (okJobs(p).length ? 'accent' : '')) : '');
     const n = actionCount(p);
     $('apply').textContent = n ? `Apply ${n} change${n === 1 ? '' : 's'} to Simpro` : 'Nothing to apply';
-    $('resultTitle').textContent = p.applied ? 'Result' : 'Dry run - nothing has been changed yet';
+    $('resultTitle').textContent = p.applied ? 'Result' : 'Preview - nothing has been changed yet';
     const tabs = [
       ['create', `Create (${p.creates.length})`], ['update', `Update (${p.changes.length})`], ['warn', `Warnings (${p.warnings.length})`],
       ['only', `In Simpro only (${p.simproOnly.length})`]
@@ -532,12 +532,12 @@ export function startApp({ transport, who }) {
         }
         progress(`Applying… ${++done} of ${total}`, done, total);
       }
-    } catch (e) { showError('Stopped part-way: ' + e.message + ' - run the dry run again to see what is left.'); }
+    } catch (e) { showError('Stopped part-way: ' + e.message + ' - run the preview again to see what is left.'); }
     log(`\nDONE  Added: ${added}   Updated: ${updated}   Jobs completed: ${closedJobs}   Errors: ${errors}`);
     p.applied = true; p.result = { added, updated, errors, closedJobs };
     progressDone(); setBusy(false);
     renderResults();
-    $('tiles').insertAdjacentHTML('afterbegin', `<div class="banner ${errors ? 'bad' : 'ok'}">${errors ? '⚠' : '✓'} Applied: ${added} added, ${updated} updated${jl.length ? `, ${closedJobs} of ${jl.length} job${jl.length === 1 ? '' : 's'} completed` : ''}, ${errors} error${errors === 1 ? '' : 's'}. Run the dry run again to confirm everything matches.</div>`);
+    $('tiles').insertAdjacentHTML('afterbegin', `<div class="banner ${errors ? 'bad' : 'ok'}">${errors ? '⚠' : '✓'} Applied: ${added} added, ${updated} updated${jl.length ? `, ${closedJobs} of ${jl.length} job${jl.length === 1 ? '' : 's'} completed` : ''}, ${errors} error${errors === 1 ? '' : 's'}. Run the preview again to confirm everything matches.</div>`);
     downloadReport(true);
   };
 
@@ -560,7 +560,7 @@ export function startApp({ transport, who }) {
     const ts = p.stamp.toISOString().slice(0, 16).replace(/[-:T]/g, '');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `Simpro sync ${p.applied ? 'APPLIED' : 'dry run'} ${p.fileName.replace(/\.[^.]+$/, '')} ${ts}.csv`;
+    a.download = `Simpro sync ${p.applied ? 'APPLIED' : 'PREVIEW'} ${p.fileName.replace(/\.[^.]+$/, '')} ${ts}.csv`;
     document.body.appendChild(a); a.click(); a.remove();
   }
   $('download').onclick = () => downloadReport(false);

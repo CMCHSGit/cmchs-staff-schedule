@@ -129,7 +129,7 @@ body.busy{cursor:progress}
         <div style="font-size:13px;color:var(--muted);margin-bottom:6px">Sheets to sync — tick which ones, and check each one's Simpro asset type</div>
         <div id="sheetPicker" style="display:grid;gap:6px"></div>
       </div>
-      <div class="actions" style="margin-top:14px"><button class="primary" id="runDry">Run dry run</button><span class="muted">Reads Simpro and compares. Nothing is changed. Ticked sheets run together as one combined report.</span></div>
+      <div class="actions" style="margin-top:14px"><button class="primary" id="runDry">Preview changes</button><span class="muted">Reads Simpro and compares. Nothing is changed yet. Ticked sheets run together as one combined report.</span></div>
     </div>
   </section>
 
@@ -137,7 +137,7 @@ body.busy{cursor:progress}
   <section class="card" id="progress" hidden><span id="progText"></span><div class="bar"><div id="progBar"></div></div></section>
 
   <section class="card" id="results" hidden>
-    <h2 id="resultTitle">Dry run</h2>
+    <h2 id="resultTitle">Preview</h2>
     <div class="tiles" id="tiles"></div>
     <div class="actions">
       <button class="danger" id="apply" disabled>Apply to Simpro</button>
