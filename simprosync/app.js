@@ -22,6 +22,7 @@ export function startApp({ transport, who }) {
   let assetTypes = []; // [{ID, Name}] from Simpro, for the selected company
   let warrantySerials = new Set(); // serials with "Extended Warranty" = Yes, across ticked sheets
   let warrantyDefaultApplied = false; // so the on-by-default tick happens once per file, not every re-scan
+  let warrantyValuesSeen = new Set(); // distinct values in that column, to explain a zero match
 
   /* ---------- logging & progress ---------- */
   function log(msg) { logLines.push(msg); $('log').textContent = logLines.join('\n'); }
@@ -154,6 +155,7 @@ export function startApp({ transport, who }) {
   async function refreshWarrantyFilter() {
     const row = $('warrantyFilterRow'), chk = $('onlyWarranty'), countEl = $('warrantyCount');
     warrantySerials = new Set();
+    warrantyValuesSeen = new Set();
     if (!book) { row.hidden = true; return; }
     let anyColumn = false;
     for (const sr of getCheckedSheets()) {
@@ -173,7 +175,9 @@ export function startApp({ transport, who }) {
       const serialKey = header.find(h => h && h.trim().toLowerCase() === SyncCore.MATCH_FIELD.toLowerCase());
       if (!serialKey) continue;
       recs.forEach(({ r }) => {
-        if (SyncCore.asText(r[warrantyKey]).trim().toLowerCase() !== 'yes') return;
+        const raw = SyncCore.asText(r[warrantyKey]).trim();
+        if (raw) warrantyValuesSeen.add(raw);
+        if (raw.toLowerCase() !== 'yes') return;
         const ser = SyncCore.asText(r[serialKey]).trim().toUpperCase();
         if (ser) warrantySerials.add(ser);
       });
@@ -185,7 +189,12 @@ export function startApp({ transport, who }) {
     // per file - a deliberate untick survives re-scans from (un)ticking
     // sheets, it just doesn't survive loading a different workbook.
     if (!warrantyDefaultApplied) { chk.checked = true; warrantyDefaultApplied = true; }
-    countEl.textContent = `(${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} found)`;
+    // When nothing matched, say what the column actually contains - "0 items
+    // found" on its own gives no way to tell "none are on warranty" apart
+    // from "the column says Y, not Yes".
+    countEl.textContent = warrantySerials.size === 0 && warrantyValuesSeen.size
+      ? `(none matched - that column contains: ${[...warrantyValuesSeen].slice(0, 6).join(', ')})`
+      : `(${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} found)`;
   }
 
   /* ---------- file ---------- */
@@ -238,7 +247,11 @@ export function startApp({ transport, who }) {
   // this only narrows which of them get WRITTEN into the job's Notes, to
   // just the ones with Extended Warranty = Yes.
   const assetListHtml = jp => {
-    const onlyWarranty = $('onlyWarranty').checked && warrantySerials.size > 0;
+    // Fails closed on purpose: ticked means filter, even when that leaves
+    // nothing to list. This previously also required warrantySerials.size > 0,
+    // so a file where nothing matched silently turned the filter off and
+    // listed every asset - the opposite of what ticking it asks for.
+    const onlyWarranty = $('onlyWarranty').checked;
     let all = jp.attach.concat(jp.already);
     if (onlyWarranty) all = all.filter(a => warrantySerials.has(String(a.ser || '').toUpperCase()));
     const items = all.map(a => esc(a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`));
