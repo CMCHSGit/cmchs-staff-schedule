@@ -21,6 +21,7 @@ export function startApp({ transport, who }) {
   let busy = false;
   let assetTypes = []; // [{ID, Name}] from Simpro, for the selected company
   let warrantySerials = new Set(); // serials with "Extended Warranty" = Yes, across ticked sheets
+  let warrantyDefaultApplied = false; // so the on-by-default tick happens once per file, not every re-scan
 
   /* ---------- logging & progress ---------- */
   function log(msg) { logLines.push(msg); $('log').textContent = logLines.join('\n'); }
@@ -179,6 +180,11 @@ export function startApp({ transport, who }) {
     }
     row.hidden = !anyColumn;
     if (!anyColumn) { chk.checked = false; return; }
+    // On by default: job notes are meant to record the warranty items, so
+    // that shouldn't depend on remembering to tick a box. Only forced once
+    // per file - a deliberate untick survives re-scans from (un)ticking
+    // sheets, it just doesn't survive loading a different workbook.
+    if (!warrantyDefaultApplied) { chk.checked = true; warrantyDefaultApplied = true; }
     countEl.textContent = `(${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} found)`;
   }
 
@@ -189,6 +195,7 @@ export function startApp({ transport, who }) {
     showError(''); resetResults();
     try {
       book = await XLSXLite.read(f); fileName = f.name;
+      warrantyDefaultApplied = false;
       renderSheetRows();
       $('fileName').textContent = f.name;
       $('fileInfo').hidden = false; $('drop').classList.add('has-file');
@@ -321,7 +328,11 @@ export function startApp({ transport, who }) {
         if (!fdef) {
           progress(`Reading ${sr.typeName} fields from Simpro…`);
           const fields = await getAll(`/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/`);
-          const fdefList = await pool(fields, 4, async f => {
+          // Concurrency here isn't about hammering Simpro - main.js's
+          // transport packs up to 25 calls into ONE proxy round trip, so a
+          // pool narrower than that just leaves most of each ~3s round trip
+          // empty. Keep these at/above 25 so every batch travels full.
+          const fdefList = await pool(fields, 50, async f => {
             const { status, data } = await call('GET', `/companies/${cid}/setup/assetTypes/${sr.tid}/customFields/${f.ID}`);
             return status === 200 ? data : f;
           });
@@ -350,7 +361,11 @@ export function startApp({ transport, who }) {
           }
           const assets = siteAssets.filter(a => String((a.AssetType || {}).ID) === String(sr.tid) && !a.Archived);
           log(`  Site ${site}: ${assets.length} ${sr.typeName} assets in Simpro`);
-          const cfs = await pool(assets, 10, async a => {
+          // One call per asset is unavoidable (the serial we match on is
+          // itself a custom field, so there's no knowing which assets matter
+          // until they're read) - but at 50 wide these pack into full
+          // 25-request batches instead of quarter-full ones.
+          const cfs = await pool(assets, 50, async a => {
             const { status, data } = await call('GET', `/companies/${cid}/sites/${site}/assets/${a.ID}/customFields/?pageSize=250`);
             if (status !== 200) { log(`    could not read asset ${a.ID}: ${status}`); return null; }
             return data;

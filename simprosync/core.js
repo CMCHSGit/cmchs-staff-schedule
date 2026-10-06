@@ -58,9 +58,17 @@ const SyncCore = (() => {
     let unchanged = 0;
     const jobKey = Object.keys(recs[0] ? recs[0].r : {}).find(k => k.trim().toLowerCase() === JOB_COL.toLowerCase());
     // Carried onto each job item below so the job-completion note can record
-    // what was attached (model + serial), not just the serial - absent
-    // entirely (model: '') for a sheet with no "Model" column.
-    const modelKey = Object.keys(mapped).find(k => k.trim().toLowerCase() === 'model');
+    // what was attached (model + serial), not just the serial. Read from the
+    // row's own headers rather than the Simpro-mapped ones, so it still
+    // works for a column Simpro has no matching field for - and accept the
+    // spellings these sheets actually use ("Device Model" in CHS's lists),
+    // not just a bare "Model", which found nothing and silently left every
+    // note serial-only.
+    const rowKeys = Object.keys(recs[0] ? recs[0].r : {});
+    const norm = k => k.trim().toLowerCase();
+    const modelKey = ['device model', 'model', 'model name', 'model number']
+      .map(want => rowKeys.find(k => norm(k) === want)).find(Boolean)
+      || rowKeys.find(k => norm(k).includes('model'));
     for (const { rownum, r } of recs) {
       const site = asText(r[SITE_COL]); const ser = asText(r[MATCH_FIELD]).toUpperCase();
       if (!ser) { warnings.push({ row: rownum, serial: '', msg: 'No serial number - row skipped' }); continue; }
