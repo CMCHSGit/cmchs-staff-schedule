@@ -254,10 +254,14 @@ export function startApp({ transport, who }) {
     if (!warrantyColumnFound) return `<div>${all.map(assetLine).join('<br>')}</div>`;
     const onWarranty = a => warrantySerials.has(String(a.ser || '').toUpperCase());
     const yes = all.filter(onWarranty), no = all.filter(a => !onWarranty(a));
-    const lines = [];
-    if (yes.length) lines.push('Extended Warranty required on these devices:', ...yes.map(assetLine));
+    // Says so explicitly when nothing is on warranty, rather than just
+    // omitting the section - "no devices require it" and "we didn't check"
+    // shouldn't look identical to whoever reads the job later.
+    const lines = yes.length
+      ? ['Extended Warranty required on these devices:', ...yes.map(assetLine)]
+      : ['No devices require Extended Warranty.'];
     if (no.length) {
-      if (lines.length) lines.push(''); // blank line between the two groups
+      lines.push(''); // blank line between the two groups
       lines.push('Not required on the following:', ...no.map(assetLine));
     }
     return `<div>${lines.join('<br>')}</div>`;
