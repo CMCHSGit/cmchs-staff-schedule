@@ -14,6 +14,26 @@ const SIMPRO_PROXY_URL = 'https://script.google.com/macros/s/AKfycbzKLt_IP3GPRiN
 const $ = id => document.getElementById(id)
 let started = false
 
+// SimproSync is a separate entry point from the React app, so it never runs
+// vite-plugin-pwa's registerSW - which means nothing on this page ever asked
+// the browser to check for a newer service worker. The old one just kept
+// serving its precached copy of this page forever, so fixes that were long
+// since live on the server never actually reached anyone's browser (closing
+// and reopening doesn't help - the stale worker is simply reused). The worker
+// itself already does skipWaiting + clients.claim, so it only needed asking.
+if ('serviceWorker' in navigator) {
+  const hadController = !!navigator.serviceWorker.controller
+  navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(() => {})
+  let reloaded = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Only when replacing an existing worker - on a first-ever visit the
+    // initial claim would otherwise cause one pointless reload.
+    if (!hadController || reloaded) return
+    reloaded = true
+    location.reload()
+  })
+}
+
 function gate(state, msg) {
   $('gate').hidden = state === 'ready'
   $('app').hidden = state !== 'ready'
