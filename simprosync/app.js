@@ -540,11 +540,24 @@ export function startApp({ transport, who }) {
         }));
         if (jp.result.failed) { errors++; log(`  Job ${jp.jobNo} LEFT OPEN - ${jp.result.failed} asset(s) could not be attached`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
         const note = noteText();
-        if (!plainNotes(jp.job.notes).includes(note)) {
-          const newNotes = (jp.job.notes ? jp.job.notes + '\n' : '') + assetListHtml(jp) + `<div>${note}</div>`;
+        // Skip only when the exact block about to be written is already
+        // there. This used to test for the "EST and PVT completed - <date>"
+        // line alone, which silently swallowed the whole write - asset list
+        // included - on a job that had been run before and then reopened,
+        // even though the list itself had changed (warranty-filtered now,
+        // and with models). Existing notes are never edited or removed, only
+        // appended to; re-running a job that's genuinely unchanged still
+        // writes nothing, and the Complete-stage check above stops this
+        // repeating unless someone deliberately reopens the job.
+        const block = assetListHtml(jp) + `<div>${note}</div>`;
+        if (!plainNotes(jp.job.notes).includes(plainNotes(block))) {
+          const newNotes = (jp.job.notes ? jp.job.notes + '\n' : '') + block;
           const rn = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Notes: newNotes });
           if (!okStatus(rn)) { errors++; jp.closeError = `notes: ${rn.status} ${brief(rn.data)}`; log(`  ERROR job ${jp.jobNo}: could not add the note - job LEFT OPEN: ${rn.status} ${brief(rn.data)}`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
           jp.noteAdded = note;
+          log(`  Job ${jp.jobNo}: notes updated (${jp.attach.concat(jp.already).length} assets attached, ${plainNotes(assetListHtml(jp)).split('\n').filter(Boolean).length} listed in notes)`);
+        } else {
+          log(`  Job ${jp.jobNo}: notes already contain this exact list - left as they are`);
         }
         let r = await call('PATCH', `/companies/${p.cid}/jobs/${jp.jobNo}`, { Stage: 'Complete' });
         if (!okStatus(r)) { errors++; jp.closeError = `stage: ${r.status} ${brief(r.data)}`; log(`  ERROR job ${jp.jobNo}: could not set stage Complete: ${r.status} ${brief(r.data)}`); }
