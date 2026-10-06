@@ -472,34 +472,44 @@ export function startApp({ transport, who }) {
       return x.status === 'ok';
     };
     try {
-      await pool(p.changes, 3, async c => {
-        let ok = true; for (const x of c.changes) ok = (await setField(c.site, c.id, x)) && ok;
-        if (ok) updated++;
-      }, () => progress(`Applying… ${++done} of ${total}`, done, total));
-      for (const c of p.creates) {
+      // Every setField/create/attach call below goes through the same
+      // batching transport (main.js) - it only actually combines calls that
+      // land in the same tick, so running a field's worth of PATCHes (or a
+      // job's worth of attaches) via Promise.all, instead of one `await` at
+      // a time in a for-loop, is what lets the batcher do its job at all.
+      // This used to be sequential throughout, which meant every single
+      // field/attach paid its own ~1.5s Apps Script round trip one at a
+      // time - the actual cause of the reported "30-60s per asset" slowdown,
+      // not the batching mechanism itself (which was already fine).
+      await pool(p.changes, 8, async c => {
+        const results = await Promise.all(c.changes.map(x => setField(c.site, c.id, x)));
+        if (results.every(Boolean)) updated++;
+        progress(`Applying… ${++done} of ${total}`, done, total);
+      }, () => {});
+      await pool(p.creates, 8, async c => {
         const start = SyncCore.asDateIso(c.r['Date Installed']) || new Date().toISOString().slice(0, 10);
         const { status, data } = await call('POST', `/companies/${p.cid}/sites/${c.site}/assets/`, { AssetType: +c.tid, StartDate: start });
         if (!(status === 200 || status === 201) || !data || !data.ID) { errors++; c.error = true; log(`  ERROR creating ${c.ser} (row ${c.rownum}, ${c.sheet}): ${status} ${brief(data)}`); }
         else {
           c.newId = data.ID; added++;
-          for (const x of c.changes) await setField(c.site, c.newId, x);
+          await Promise.all(c.changes.map(x => setField(c.site, c.newId, x)));
           log(`  created asset ${c.newId} for ${c.ser} (${c.sheet})`);
         }
         progress(`Applying… ${++done} of ${total}`, done, total);
-      }
+      }, () => {});
       // ---- jobs: attach assets, then complete
       const okStatus = r => r.status === 200 || r.status === 201 || r.status === 204;
       for (const jp of jl) {
         jp.result = { attached: 0, failed: 0 };
-        for (const it of jp.attach) {
+        await Promise.all(jp.attach.map(async it => {
           let aid = it.assetId;
           if (!aid) { const cr = p.creates.find(c => c.site === it.site && c.ser === it.ser); aid = cr && cr.newId; }
-          if (!aid) { it.status = 'fail'; jp.result.failed++; log(`  ERROR job ${jp.jobNo}: ${it.ser} has no Simpro asset (it was not created)`); continue; }
+          if (!aid) { it.status = 'fail'; jp.result.failed++; log(`  ERROR job ${jp.jobNo}: ${it.ser} has no Simpro asset (it was not created)`); return; }
           let r = await call('POST', ccPath(p, jp), { Asset: +aid });
           if (!okStatus(r) && r.status >= 400 && r.status < 500) { const r2 = await call('POST', ccPath(p, jp), { Asset: { ID: +aid } }); if (okStatus(r2)) r = r2; }
           if (okStatus(r)) { it.status = 'ok'; jp.result.attached++; }
           else { it.status = 'fail'; jp.result.failed++; log(`  ERROR job ${jp.jobNo}: attaching ${it.ser} (asset ${aid}) failed: ${r.status} ${brief(r.data)}`); }
-        }
+        }));
         if (jp.result.failed) { errors++; log(`  Job ${jp.jobNo} LEFT OPEN - ${jp.result.failed} asset(s) could not be attached`); progress(`Applying… ${++done} of ${total}`, done, total); continue; }
         const note = noteText();
         if (!plainNotes(jp.job.notes).includes(note)) {
