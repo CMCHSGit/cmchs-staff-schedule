@@ -41,12 +41,16 @@ export function startApp({ transport, who }) {
       try {
         r = await transport(method, path, body);
       } catch (e) {
-        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '-', e.message); // TEMP diagnostic
+        // Logged permanently - a call that's silently retrying with
+        // multi-second backoff sleeps looks like "it's just slow" from the
+        // UI alone, so this is the first thing worth checking on any future
+        // slowdown report.
+        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '-', e.message);
         if (a < 3) { await sleep(2000 * (a + 1)); continue; }
         return { status: 0, data: 'Network error: ' + e.message };
       }
       if ((r.status === 429 || r.status >= 500) && a < 3) {
-        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '- status', r.status); // TEMP diagnostic
+        console.warn('[simproSync] call() retry', a + 1, 'of 4 -', method, path, '- status', r.status);
         await sleep(4000 * (a + 1)); continue;
       }
       return r;

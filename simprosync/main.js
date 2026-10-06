@@ -51,9 +51,10 @@ function makeTransport() {
     if (!batch.length) return
     if (queue.length) scheduleFlush()
 
-    // TEMP diagnostic (see TODO below) - batch size and round-trip time,
-    // to find out whether requests are actually batching together and
-    // whether the proxy itself is the slow part.
+    // Logged permanently, not just for this one investigation - batch size
+    // and round-trip time per proxy call is exactly what a future slowdown
+    // report needs first (it's what found the last one: requests weren't
+    // batching because nothing called this concurrently - see app.js).
     const t0 = performance.now()
     const tag = '[simproSync] batch of ' + batch.length
 
