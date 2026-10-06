@@ -21,7 +21,7 @@ export function startApp({ transport, who }) {
   let busy = false;
   let assetTypes = []; // [{ID, Name}] from Simpro, for the selected company
   let warrantySerials = new Set(); // serials with "Extended Warranty" = Yes, across ticked sheets
-  let warrantyDefaultApplied = false; // so the on-by-default tick happens once per file, not every re-scan
+  let warrantyColumnFound = false; // whether the ticked sheets have an Extended Warranty column at all
   let warrantyValuesSeen = new Set(); // distinct values in that column, to explain a zero match
 
   /* ---------- logging & progress ---------- */
@@ -133,7 +133,7 @@ export function startApp({ transport, who }) {
         <select class="sheet-type" style="flex:1;min-width:140px">${assetTypeOptionsHtml(tid)}</select>
       </div>`;
     }).join('');
-    el.querySelectorAll('.sheet-chk, .sheet-type').forEach(input => input.addEventListener('change', () => { resetResults(); updateButtons(); refreshWarrantyFilter(); }));
+    el.querySelectorAll('.sheet-chk, .sheet-type').forEach(input => input.addEventListener('change', () => { resetResults(); updateButtons(); refreshWarrantyInfo(); }));
     updateButtons();
   }
   function getCheckedSheets() {
@@ -148,14 +148,15 @@ export function startApp({ transport, who }) {
   }
 
   // Scans every ticked sheet for an "Extended Warranty" column and collects
-  // the Serial Number of every row where it's "Yes" - lets "only sync
-  // warranty items" be a single checkbox instead of hand-typing/pasting
-  // every serial into the free-text filter next to it. Silent no-op (and
-  // the checkbox stays hidden) if no ticked sheet has that column at all.
-  async function refreshWarrantyFilter() {
-    const row = $('warrantyFilterRow'), chk = $('onlyWarranty'), countEl = $('warrantyCount');
+  // the Serial Number of every row where it's "Yes". That set decides which
+  // group each asset lands in within the job note - nothing is excluded by
+  // it. Stays hidden, and assetListHtml() falls back to one flat list, if no
+  // ticked sheet has the column at all.
+  async function refreshWarrantyInfo() {
+    const row = $('warrantyFilterRow'), countEl = $('warrantyCount');
     warrantySerials = new Set();
     warrantyValuesSeen = new Set();
+    warrantyColumnFound = false;
     if (!book) { row.hidden = true; return; }
     let anyColumn = false;
     for (const sr of getCheckedSheets()) {
@@ -182,19 +183,15 @@ export function startApp({ transport, who }) {
         if (ser) warrantySerials.add(ser);
       });
     }
+    warrantyColumnFound = anyColumn;
     row.hidden = !anyColumn;
-    if (!anyColumn) { chk.checked = false; return; }
-    // On by default: job notes are meant to record the warranty items, so
-    // that shouldn't depend on remembering to tick a box. Only forced once
-    // per file - a deliberate untick survives re-scans from (un)ticking
-    // sheets, it just doesn't survive loading a different workbook.
-    if (!warrantyDefaultApplied) { chk.checked = true; warrantyDefaultApplied = true; }
-    // When nothing matched, say what the column actually contains - "0 items
-    // found" on its own gives no way to tell "none are on warranty" apart
+    if (!anyColumn) return;
+    // When nothing is marked Yes, say what the column actually contains -
+    // "0 found" on its own gives no way to tell "none are on warranty" apart
     // from "the column says Y, not Yes".
     countEl.textContent = warrantySerials.size === 0 && warrantyValuesSeen.size
-      ? `(none matched - that column contains: ${[...warrantyValuesSeen].slice(0, 6).join(', ')})`
-      : `(${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} found)`;
+      ? `- nothing marked Yes (that column contains: ${[...warrantyValuesSeen].slice(0, 6).join(', ')})`
+      : `- ${warrantySerials.size} item${warrantySerials.size === 1 ? '' : 's'} marked Yes`;
   }
 
   /* ---------- file ---------- */
@@ -204,11 +201,10 @@ export function startApp({ transport, who }) {
     showError(''); resetResults();
     try {
       book = await XLSXLite.read(f); fileName = f.name;
-      warrantyDefaultApplied = false;
       renderSheetRows();
       $('fileName').textContent = f.name;
       $('fileInfo').hidden = false; $('drop').classList.add('has-file');
-      await refreshWarrantyFilter();
+      await refreshWarrantyInfo();
     } catch (e) { book = null; showError('Could not read that file: ' + e.message + ' (if it is open in Excel with unsaved changes, save it first).'); }
     updateButtons();
   }
@@ -218,7 +214,6 @@ export function startApp({ transport, who }) {
   drop.addEventListener('drop', e => takeFile(e.dataTransfer.files[0]));
   $('file').onchange = e => { takeFile(e.target.files[0]); e.target.value = ''; };
   $('only').oninput = resetResults;
-  $('onlyWarranty').onchange = resetResults;
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => e.preventDefault());
 
@@ -233,29 +228,39 @@ export function startApp({ transport, who }) {
   const todayNZ = () => { const d = new Date(); return `${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
   const noteText = () => `EST and PVT completed - ${todayNZ()}`;
   const plainNotes = h => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(div|p)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').trim();
-  // Everything ending up attached when the job closes (new this run, plus
-  // already-attached from an earlier run, possibly spanning more than one
-  // sheet - see combinedJobs in the preview below) - one line per asset,
-  // model omitted (just the serial) for a sheet with no "Model" column. One
-  // <div> with <br> between items, not a <div> per item - matches the
-  // single <div> the "EST and PVT completed" note already uses below, and
-  // guarantees an actual line break per item regardless of how Simpro's
-  // notes editor handles adjacent top-level block elements.
+  // One line per asset for the job-completion note, covering everything
+  // attached when the job closes (new this run plus already-attached from an
+  // earlier one, possibly spanning more than one sheet - see combinedJobs in
+  // the preview below).
   //
-  // When the Extended Warranty checkbox is on, every asset is still
-  // attached to the job as normal (see $('runDry').onclick's comment) -
-  // this only narrows which of them get WRITTEN into the job's Notes, to
-  // just the ones with Extended Warranty = Yes.
+  // A defibrillator's battery is a separately tracked serial, so it's named
+  // alongside the device it belongs to rather than left to be looked up.
+  const isDefib = a => String(a.deviceType || '').toLowerCase().includes('defib');
+  const assetLine = a => {
+    const base = a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`;
+    return esc(isDefib(a) && a.batterySerial ? `${base} (Battery SN:${a.batterySerial})` : base);
+  };
+  // Every asset is listed; Extended Warranty decides which group it lands in
+  // rather than whether it appears at all. Falls back to a flat list when the
+  // sheets have no Extended Warranty column, since the headings would be
+  // claiming a distinction nothing in the file actually supports.
+  //
+  // Built as ONE <div> with <br> between lines, not a <div> per line - Simpro's
+  // notes editor runs adjacent top-level blocks together, which is what made an
+  // earlier per-item-<div> version come out squished.
   const assetListHtml = jp => {
-    // Fails closed on purpose: ticked means filter, even when that leaves
-    // nothing to list. This previously also required warrantySerials.size > 0,
-    // so a file where nothing matched silently turned the filter off and
-    // listed every asset - the opposite of what ticking it asks for.
-    const onlyWarranty = $('onlyWarranty').checked;
-    let all = jp.attach.concat(jp.already);
-    if (onlyWarranty) all = all.filter(a => warrantySerials.has(String(a.ser || '').toUpperCase()));
-    const items = all.map(a => esc(a.model ? `${a.model} — SN:${a.ser}` : `SN:${a.ser}`));
-    return items.length ? `<div>${items.join('<br>')}</div>` : '';
+    const all = jp.attach.concat(jp.already);
+    if (!all.length) return '';
+    if (!warrantyColumnFound) return `<div>${all.map(assetLine).join('<br>')}</div>`;
+    const onWarranty = a => warrantySerials.has(String(a.ser || '').toUpperCase());
+    const yes = all.filter(onWarranty), no = all.filter(a => !onWarranty(a));
+    const lines = [];
+    if (yes.length) lines.push('Extended Warranty required on these devices:', ...yes.map(assetLine));
+    if (no.length) {
+      if (lines.length) lines.push(''); // blank line between the two groups
+      lines.push('Not required on the following:', ...no.map(assetLine));
+    }
+    return `<div>${lines.join('<br>')}</div>`;
   };
   const ccPath = (p, jp) => `/companies/${p.cid}/jobs/${jp.jobNo}/sections/${jp.cc.sec}/costCenters/${jp.cc.id}/assets/`;
   async function planJobs(p) {
@@ -317,7 +322,7 @@ export function startApp({ transport, who }) {
     const stamp = new Date();
     if (!sheets.length) { showError('Tick at least one sheet to sync.'); progressDone(); setBusy(false); return; }
     try {
-      log(`PREVIEW | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : '') + ($('onlyWarranty').checked ? ' | job notes: Extended Warranty items only' : ''));
+      log(`PREVIEW | ${fileName} | sheets: ${sheets.map(s => `${s.name} (${s.typeName})`).join(', ')} | ${stamp.toLocaleString('en-NZ')} | by ${WHO}` + (only ? ` | only: ${[...only].join(', ')}` : '') + (warrantyColumnFound ? ` | job notes grouped by Extended Warranty (${warrantySerials.size} marked Yes)` : ''));
 
       const creates = [], changes = [], warnings = [], simproOnly = [], simproErrors = [], dupes = [], unmapped = [];
       let unchanged = 0;
@@ -471,7 +476,7 @@ export function startApp({ transport, who }) {
     const p = plan; let html = '';
     if (k === 'create') html = p.creates.map(c => `<details class="asset"><summary><b>${esc(c.ser)}</b> <span class="muted">row ${c.rownum} · ${esc(c.sheet)} · site ${esc(c.site)} · ${c.changes.length} fields</span>${c.newId ? ` <span class="pill ok">created ${c.newId}</span>` : ''}${c.error ? ` <span class="pill bad">error</span>` : ''}</summary>${table(['Field', 'Value'], c.changes.map(x => [esc(x.col), esc(x.nv)]))}</details>`).join('') || '<p class="empty">No new assets.</p>';
     if (k === 'update') html = table(['Sheet', 'Serial', 'Row', 'Asset', 'Field', 'Simpro now', 'Spreadsheet', ''], p.changes.flatMap(c => c.changes.map(x => [esc(c.sheet), esc(c.ser), c.rownum, c.id, esc(x.col), `<span class="old">${esc(x.old) || '<i>blank</i>'}</span>`, `<span class="new">${esc(x.nv)}</span>`, x.status === 'ok' ? '<span class="pill ok">done</span>' : x.status ? '<span class="pill bad">failed</span>' : ''])));
-    if (k === 'jobs') html = '<p class="muted">After the assets are imported, each job below gets ALL its assets attached, then a line per ' + ($('onlyWarranty').checked ? '<b>Extended Warranty = Yes</b> ' : '') + 'asset (model and serial number) plus the note <b>' + esc(noteText()) + '</b> is added to the job Notes, its stage is set to <b>Complete</b> and status to <b>Job : Completed</b>. A job is only completed if every one of its assets attached successfully. A job referenced from more than one sheet is only attached-to and closed once, with items from every sheet it appeared in.</p>' +
+    if (k === 'jobs') html = '<p class="muted">After the assets are imported, each job below gets ALL its assets attached, then every one of them is listed in the job Notes' + (warrantyColumnFound ? ' - grouped into <b>Extended Warranty required</b> and <b>Not required</b>' : '') + ' (model and serial number, plus the battery serial for defibrillators), followed by the note <b>' + esc(noteText()) + '</b>. Its stage is set to <b>Complete</b> and status to <b>Job : Completed</b>. A job is only completed if every one of its assets attached successfully. A job referenced from more than one sheet is only attached-to and closed once, with items from every sheet it appeared in.</p>' +
       table(['Job', 'Name / site', 'Now', 'To attach', 'Already attached', 'Notes', ''], p.jobPlans.map(j => [
         `<b>#${esc(j.jobNo)}</b>`,
         j.job ? `${esc(j.job.name)}<br><span class="muted">${esc(j.job.site.Name || '')}</span>` : '',

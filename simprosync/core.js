@@ -66,9 +66,17 @@ const SyncCore = (() => {
     // note serial-only.
     const rowKeys = Object.keys(recs[0] ? recs[0].r : {});
     const norm = k => k.trim().toLowerCase();
-    const modelKey = ['device model', 'model', 'model name', 'model number']
-      .map(want => rowKeys.find(k => norm(k) === want)).find(Boolean)
-      || rowKeys.find(k => norm(k).includes('model'));
+    const pick = (wants, loose) => wants.map(w => rowKeys.find(k => norm(k) === w)).find(Boolean)
+      || (loose ? rowKeys.find(loose) : undefined);
+    const modelKey = pick(['device model', 'model', 'model name', 'model number'], k => norm(k).includes('model'));
+    // Device type and battery serial ride along too: a defibrillator's
+    // battery is a separately tracked serial, and the job note has to record
+    // it next to the device it belongs to.
+    const typeKey = pick(['device type', 'devicetype', 'asset type'], k => norm(k).includes('device type'));
+    const batteryKey = pick(
+      ['battery serial number', 'battery serial no', 'battery serial', 'battery sn'],
+      k => norm(k).includes('battery') && norm(k).includes('serial')
+    );
     for (const { rownum, r } of recs) {
       const site = asText(r[SITE_COL]); const ser = asText(r[MATCH_FIELD]).toUpperCase();
       if (!ser) { warnings.push({ row: rownum, serial: '', msg: 'No serial number - row skipped' }); continue; }
@@ -81,7 +89,15 @@ const SyncCore = (() => {
         const jraw = asText(r[jobKey]).replace(/^#/, '').trim();
         if (jraw) {
           if (!/^\d+$/.test(jraw)) warnings.push({ row: rownum, serial: ser, msg: `Simpro Job '${jraw}' is not a job number - not attached to a job` });
-          else { if (!jobs.has(jraw)) jobs.set(jraw, []); jobs.get(jraw).push({ rownum, site, ser, model: modelKey ? asText(r[modelKey]) : '' }); }
+          else {
+            if (!jobs.has(jraw)) jobs.set(jraw, []);
+            jobs.get(jraw).push({
+              rownum, site, ser,
+              model: modelKey ? asText(r[modelKey]) : '',
+              deviceType: typeKey ? asText(r[typeKey]) : '',
+              batterySerial: batteryKey ? asText(r[batteryKey]) : ''
+            });
+          }
         }
       }
       const rowChanges = [];
