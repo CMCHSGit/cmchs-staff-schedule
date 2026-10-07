@@ -573,8 +573,7 @@ body.busy{cursor:progress}
     wrap.hidden = rows.length === 0;
     if (!rows.length) return;
     const head = $('#assetListHeader').checked ? [['Model', 'Serial Number', 'Asset No']] : [];
-    $('#assetList').value = head.concat(rows).map(r => r.join('	')).join('
-');
+    $('#assetList').value = head.concat(rows).map(r => r.join('\t')).join('\n');
     const missing = rows.filter(r => !r[2]).length;
     $('#assetListCount').textContent = `${rows.length} asset${rows.length === 1 ? '' : 's'}`
       + (missing ? ` · ${missing} with no asset number` : '');
