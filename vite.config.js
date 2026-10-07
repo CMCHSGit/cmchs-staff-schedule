@@ -26,7 +26,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // The Excel library (Out of town → Download) loads on demand instead —
         // no reason for every phone to download ~1 MB it may never use.
-        globIgnores: ['**/exceljs*.js']
+        // Same reasoning for the Ansur PDF builder: a ~590 KB self-contained
+        // page only the service team opens, and leaving it out of the
+        // precache means it's always fetched fresh rather than going stale
+        // behind the worker the way /simprosync/ did.
+        globIgnores: ['**/exceljs*.js', '**/ansurtopdf/**']
       },
       includeAssets: ['icons/*.png'],
       manifest: {
