@@ -45,6 +45,14 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #bulk .spacer{flex:1}
 #count{color:var(--muted);font-size:13px}
 label.chk{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--muted);cursor:pointer}
+.sigline{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+.sigline input[type=text]{font:inherit;padding:5px 8px;border:1px solid var(--line, #d5dbe1);border-radius:6px;min-width:220px}
+.siglist{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.sigitem{display:flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--line, #d5dbe1);border-radius:6px;padding:4px 6px 4px 8px;background:#fff;color:#1f2933}
+.sigitem img{height:28px;max-width:140px;object-fit:contain}
+.fn small{display:block;font-weight:400;color:var(--muted);font-size:12px;margin-top:2px}
+.fn small.nosig{color:#b42318}
+.sigline img{height:34px;max-width:180px;object-fit:contain;background:#fff;border:1px solid var(--line, #d5dbe1);border-radius:4px;padding:2px 6px}
 .msg{min-height:22px;font-size:13.5px;margin:8px 0 0;color:var(--muted)}
 .msg.ok{color:var(--pass)} .msg.warn{color:var(--fail)}
 #assetListWrap{margin-top:14px;padding:12px 14px}
@@ -90,6 +98,15 @@ body.busy{cursor:progress}
       <input id="file" type="file" accept=".mtr" multiple hidden>
     </div>
     <div class="folder" id="folderLine">Folder: <b id="folderName">none</b> <span>(open a folder to save PDFs straight back into it)</span></div>
+    <div class="sigline">
+      <label class="chk"><input type="checkbox" id="optSig" checked> Add signature block</label>
+      <input type="text" id="sigName" list="engList" placeholder="Engineer name, as entered in Ansur" autocomplete="off">
+      <datalist id="engList"></datalist>
+      <button id="sigPick" type="button" class="ghost">Optional: use a signature image for this name</button>
+      <input id="sigFile" type="file" accept="image/png,image/jpeg" hidden>
+    </div>
+    <div id="sigList" class="siglist"></div>
+    <div class="sigline" id="sigNote"></div>
   </section>
 
   <div id="bulk" hidden>
@@ -202,17 +219,23 @@ body.busy{cursor:progress}
       const dec = fmt && /\.(0+)$/.test(fmt) ? fmt.split('.')[1].length : null;
       const n = +v; return dec != null ? n.toFixed(dec) : String(n);
     };
-    const unitFmt = (u) => ({ uA: 'µA', mA: 'mA', Ohm: 'Ohm', MOhm: 'MOhm' }[u] || u || '');
+    const unitFmt = (u) => ({ uA: 'µA', mA: 'mA', Ohm: 'Ω', mOhm: 'mΩ', kOhm: 'kΩ', MOhm: 'MΩ', GOhm: 'GΩ' }[u] || u || '');
+    // One formatter for every limit: handles two-sided, high-only and low-only limits.
+    const limitText = (lo, hi, unit) => {
+      lo = numFmt(lo); hi = numFmt(hi); const u = unitFmt(unit);
+      if (lo && hi) return `${lo} – ${hi} ${u}`.trim();
+      if (hi) return `max ${hi} ${u}`.trim();
+      if (lo) return `min ${lo} ${u}`.trim();
+      return '—';
+    };
     const esaLimit = (te, limKey) => {
       const stds = kids(path(te, 'ExpectedResult'), 'Standard');
       for (const a of stdPref) {
         const s = stds.find(x => x.getAttribute('AlphaName') === a); if (!s) continue;
         const L = kids(s, 'Limit').find(x => x.getAttribute('Key') === limKey); if (!L) continue;
-        const v = (t) => { const e = kids(L, 'Value').find(x => x.getAttribute('Type') === t); return e ? numFmt(txt(e)) : ''; };
-        const lo = v('Low'), hi = v('High'), u = unitFmt(txt(kid(L, 'Unit')));
-        if (lo && hi) return `${lo} – ${hi} ${u}`.trim();
-        if (hi) return `max ${hi} ${u}`.trim();
-        if (lo) return `min ${lo} ${u}`.trim();
+        const v = (t) => { const e = kids(L, 'Value').find(x => x.getAttribute('Type') === t); return e ? txt(e) : ''; };
+        const t = limitText(v('Low'), v('High'), txt(kid(L, 'Unit')));
+        if (t !== '—') return t;
       }
       return '—';
     };
@@ -280,17 +303,17 @@ body.busy{cursor:progress}
         if (!m && !opts.includeUnrecorded) return;
         let desc = txt(kid(st, 'Description')) || (m ? txt(kid(m, 'Description')) : '');
         const lim = limits[key];
-        if (!desc) desc = `${name} reading${lim && lim.unit ? ` (${lim.unit})` : ''}`;
+        if (!desc) desc = `${name} reading${lim && lim.unit ? ` (${unitFmt(lim.unit)})` : ''}`;
         const vEl = m ? kid(m, 'Value') : null;
         const result = m ? `${numFmt(txt(vEl), vEl && vEl.getAttribute('Format'))} ${unitFmt(txt(kid(m, 'Unit')))}`.trim() : '—';
-        const limText = lim ? `${lim.lo} – ${lim.hi} ${lim.unit}`.trim() : '—';
+        const limText = lim ? limitText(lim.lo, lim.hi, lim.unit) : '—';
         rows.push({ item: desc, result: result || '—', limits: limText, status: m ? txt(kid(m, 'Status')) : 'Not recorded' });
       });
       // Measurements with no matching template step (rare) — still show them.
       Object.keys(meas).forEach(k => {
         if (kids(path(te, 'PlugInData/Steps'), 'Step').some(s => s.getAttribute('Key') === k)) return;
         const m = meas[k];
-        rows.push({ item: txt(kid(m, 'Description')) || `${name} ${k}`, result: `${txt(kid(m, 'Value'))} ${txt(kid(m, 'Unit'))}`.trim(), limits: limits[k] ? `${limits[k].lo} – ${limits[k].hi} ${limits[k].unit}`.trim() : '—', status: txt(kid(m, 'Status')) });
+        rows.push({ item: txt(kid(m, 'Description')) || `${name} ${k}`, result: `${txt(kid(m, 'Value'))} ${txt(kid(m, 'Unit'))}`.trim(), limits: limits[k] ? limitText(limits[k].lo, limits[k].hi, limits[k].unit) : '—', status: txt(kid(m, 'Status')) });
       });
       if (!rows.length && !opts.includeUnrecorded) {
         // e.g. a test marked NA: show one line rather than an empty table
@@ -335,15 +358,21 @@ body.busy{cursor:progress}
   const hex = (h) => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
   const COL = { ink: hex('#1f2933'), muted: hex('#5f6b7a'), line: hex('#d5dbe1'), head: hex('#eef2f5'), pass: hex('#1e7a46'), fail: hex('#b42318'), other: hex('#7a6a1e'), white: rgb(1, 1, 1) };
 
-  async function renderPdf(m) {
+  async function renderPdf(m, so = {}) {
     const pdf = await PDFDocument.create();
     const base = m.fileName.replace(/\.mtr$/i, '');
     pdf.setTitle(base); pdf.setAuthor(m.dutMap['Testing Engineer'] || ''); pdf.setSubject('AS/NZS 3551 PVT report');
     pdf.setCreator('Ansur PVT Report Builder'); pdf.setProducer('Ansur PVT Report Builder');
     const FR = await pdf.embedFont(StandardFonts.Helvetica), FB = await pdf.embedFont(StandardFonts.HelveticaBold);
-    const charset = new Set(FR.getCharacterSet());
-    const clean = (s) => Array.from(String(s == null ? '' : s)).map(c => (charset.has(c.codePointAt(0)) ? c : (c === ' ' ? ' ' : '?'))).join('');
-    const W = (s, f, z) => f.widthOfTextAtSize(s, z);
+    // Helvetica has no Greek, so characters like Ω are drawn in the Symbol font instead.
+    const FS = await pdf.embedFont(StandardFonts.Symbol);
+    const charset = new Set(FR.getCharacterSet()), symset = new Set(FS.getCharacterSet());
+    const isSym = (c) => !charset.has(c.codePointAt(0)) && symset.has(c.codePointAt(0));
+    const clean = (s) => Array.from(String(s == null ? '' : s)).map(c => (charset.has(c.codePointAt(0)) || isSym(c) ? c : (c === '\u00a0' ? ' ' : '?'))).join('');
+    // Split a cleaned string into runs of [text, font] so Symbol characters get their own font.
+    const runs = (s, f) => { const out = []; Array.from(s).forEach(c => { const rf = isSym(c) ? FS : f; const last = out[out.length - 1]; if (last && last[1] === rf) last[0] += c; else out.push([c, rf]); }); return out; };
+    const W = (s, f, z) => runs(s, f).reduce((a, [t, rf]) => a + rf.widthOfTextAtSize(t, z), 0);
+    const drawOn = (pg, s, x, baseline, f, z, color) => { runs(clean(s), f).forEach(([t, rf]) => { pg.drawText(t, { x, y: baseline, size: z, font: rf, color }); x += rf.widthOfTextAtSize(t, z); }); };
 
     const wrap = (s, f, z, w) => {
       s = clean(s); const out = []; let line = '';
@@ -362,7 +391,7 @@ body.busy{cursor:progress}
     let page, y; const pages = [];
     const newPage = () => { page = pdf.addPage([PW, PH]); pages.push(page); y = PH - MT; };
     const room = () => y - MB;
-    const draw = (s, x, baseline, f, z, color) => { if (s) page.drawText(clean(s), { x, y: baseline, size: z, font: f, color }); };
+    const draw = (s, x, baseline, f, z, color) => { if (s) drawOn(page, s, x, baseline, f, z, color); };
     const baselineFor = (top, lead, z) => top - (lead / 2 + z * 0.35);
 
     // spans: [{t, f, z, color}] on one line
@@ -430,6 +459,26 @@ body.busy{cursor:progress}
       table([45 * MM, CW - 45 * MM], null, eq, { firstColFill: true });
       y -= 3;
     }
+    // Signature block on page 1: signature over the left line, test date over the right line.
+    if (so.on) {
+      const SBH = 14 + 6 + 4 + 46 + 14;
+      if (SBH > room()) newPage();
+      heading([{ t: 'Signatures', f: FB, z: 11, color: COL.ink }], 14, 6, 4);
+      const colW = 68 * MM, lx = ML + 8 * MM, rx = PW - MR - 8 * MM - colW, lineY = y - 44;
+      if (so.sig && so.sig.bytes) {
+        const img = so.sig.type === 'png' ? await pdf.embedPng(so.sig.bytes) : await pdf.embedJpg(so.sig.bytes);
+        const sc = Math.min((colW - 16) / img.width, 32 / img.height);
+        page.drawImage(img, { x: lx + 8, y: lineY + 2, width: img.width * sc, height: img.height * sc });
+      }
+      const d = m.date && !isNaN(m.date) ? `${pad2(m.date.getDate())}.${pad2(m.date.getMonth() + 1)}.${m.date.getFullYear()}` : '';
+      if (d) draw(d, rx + (colW - W(d, FR, 10)) / 2, lineY + 3, FR, 10, COL.ink);
+      [lx, rx].forEach(x => page.drawLine({ start: { x, y: lineY }, end: { x: x + colW, y: lineY }, thickness: 0.7, color: COL.ink }));
+      const eng = m.dutMap['Testing Engineer'];
+      const capL = eng ? `Tested by: ${eng}` : 'Tested by', capR = 'Date';
+      draw(capL, lx + (colW - W(clean(capL), FR, 7.5)) / 2, lineY - 10, FR, 7.5, COL.muted);
+      draw(capR, rx + (colW - W(capR, FR, 7.5)) / 2, lineY - 10, FR, 7.5, COL.muted);
+      y = lineY - 18;
+    }
     heading([{ t: 'Results', f: FB, z: 11, color: COL.ink }], 14, 6, 2);
 
     const cols = [CW - 80 * MM, 25 * MM, 30 * MM, 25 * MM];
@@ -465,8 +514,8 @@ body.busy{cursor:progress}
       const maxL = CW - W(right, FR, 7.5) - 12;
       let l = clean(left); while (W(l, FR, 7.5) > maxL && l.length > 4) l = l.slice(0, -2);
       if (l !== clean(left)) l = l.slice(0, -1) + '…';
-      p.drawText(l, { x: ML, y: 10 * MM, size: 7.5, font: FR, color: COL.muted });
-      p.drawText(right, { x: PW - MR - W(right, FR, 7.5), y: 10 * MM, size: 7.5, font: FR, color: COL.muted });
+      drawOn(p, l, ML, 10 * MM, FR, 7.5, COL.muted);
+      drawOn(p, right, PW - MR - W(right, FR, 7.5), 10 * MM, FR, 7.5, COL.muted);
     });
     return await pdf.save();
   }
@@ -501,7 +550,50 @@ body.busy{cursor:progress}
 
   // ---------- UI ----------
   const $ = (s) => document.querySelector(s);
-  const state = { items: [], dir: null };
+  const state = { items: [], dir: null, sigs: {} };
+  let onRendered = null;
+  // One signature per engineer, matched to the record's Testing Engineer field.
+  // Kept in this browser (localStorage) so they survive closing the page.
+  const SIGS_KEY = 'ansurPvt.signatures', SIG_ON_KEY = 'ansurPvt.signatureOn', OLD_SIG_KEY = 'ansurPvt.signature';
+  const normName = (n) => String(n || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  const engOf = (m) => (m && m.dutMap && m.dutMap['Testing Engineer']) || '';
+  const sigFor = (m) => state.sigs[normName(engOf(m))] || null;
+  // Default signature: the engineer's name drawn in a handwriting font installed on this PC,
+  // rasterised to PNG in the browser (so nothing needs embedding and it works offline).
+  const SCRIPT_FONTS = ['Segoe Script', 'Lucida Handwriting', 'Brush Script MT', 'Ink Free', 'Segoe Print'];
+  let scriptFont;
+  const pickScriptFont = () => {
+    if (scriptFont !== undefined) return scriptFont;
+    const c = document.createElement('canvas').getContext('2d'), probe = 'Peter Lin mmwwiil 0123';
+    const width = (f) => { c.font = f; return c.measureText(probe).width; };
+    const base = [width('64px monospace'), width('64px serif')];
+    scriptFont = SCRIPT_FONTS.find(f => width(`64px "${f}", monospace`) !== base[0] || width(`64px "${f}", serif`) !== base[1]) || null;
+    return scriptFont;
+  };
+  const scriptCache = {};
+  const scriptSig = (name) => {
+    name = String(name || '').trim().replace(/\s+/g, ' ');
+    if (!name) return null;
+    if (scriptCache[name] !== undefined) return scriptCache[name];
+    const fam = pickScriptFont(), px = 96;
+    const font = fam ? `${px}px "${fam}"` : `italic ${px}px "Times New Roman", serif`;
+    const cv = document.createElement('canvas'), ctx = cv.getContext('2d');
+    ctx.font = font;
+    const mt = ctx.measureText(name), pad = 12;
+    const left = mt.actualBoundingBoxLeft || 0, right = mt.actualBoundingBoxRight || mt.width;
+    const asc = mt.actualBoundingBoxAscent || px * 0.8, desc = mt.actualBoundingBoxDescent || px * 0.3;
+    cv.width = Math.ceil(left + right + pad * 2); cv.height = Math.ceil(asc + desc + pad * 2);
+    ctx.font = font; ctx.fillStyle = '#1a2340'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(name, pad + left, pad + asc);
+    return (scriptCache[name] = dataUrlToSig(cv.toDataURL('image/png')));
+  };
+  const sigOpts = (m) => ({ on: $('#optSig').checked, sig: sigFor(m) || scriptSig(engOf(m)) });
+  const dataUrlToSig = (url) => {
+    const m = /^data:image\/(png|jpe?g);base64,(.+)$/i.exec(url || ''); if (!m) return null;
+    const bin = atob(m[2]), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const type = bytes[0] === 0x89 && bytes[1] === 0x50 ? 'png' : (bytes[0] === 0xff && bytes[1] === 0xd8 ? 'jpg' : null);
+    return type ? { bytes, type, url } : null;
+  };
   const opts = () => ({ includeUnrecorded: $('#optUnrecorded').checked });
   const pdfName = (n) => n.replace(/\.mtr$/i, '') + '.pdf';
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -509,7 +601,7 @@ body.busy{cursor:progress}
   async function processItem(it) {
     try {
       it.model = parseMtr(it.text, it.name, opts());
-      it.pdf = await renderPdf(it.model);
+      it.pdf = await renderPdf(it.model, sigOpts(it.model));
       it.error = null;
     } catch (e) { it.error = e.message || String(e); it.pdf = null; }
   }
@@ -545,11 +637,14 @@ body.busy{cursor:progress}
     $('#empty').hidden = n > 0; $('#tableWrap').hidden = n === 0; $('#bulk').hidden = n === 0;
     $('#saveFolder').hidden = !state.dir; $('#overwriteWrap').hidden = !state.dir;
     $('#count').textContent = n ? `${n} file${n === 1 ? '' : 's'}` : '';
+    const engs = [...new Set(state.items.filter(it => it.model).map(it => engOf(it.model).trim()).filter(Boolean))];
+    $('#engList').innerHTML = engs.map(e => `<option value="${esc(e)}">`).join('');
+    if (onRendered) onRendered();
     tb.innerHTML = state.items.map((it, i) => {
       if (it.error) return `<tr><td class="fn" data-label="File">${esc(it.name)}</td><td colspan="5" class="err" data-label="Problem">${esc(it.error)}</td><td></td></tr>`;
       const m = it.model, k = statusKind(m.status);
       return `<tr>
-        <td class="fn" data-label="File">${esc(it.name)}</td>
+        <td class="fn" data-label="File">${esc(it.name)}${$('#optSig').checked ? (engOf(m) ? `<small class="">Tested by ${esc(engOf(m))}${sigFor(m) ? ' · signature image' : ' · script signature'}</small>` : '<small class="nosig">No engineer in record · unsigned</small>') : ''}</td>
         <td data-label="Serial">${esc(m.serial)}</td>
         <td data-label="Model">${esc(m.model)}</td>
         <td data-label="Asset no.">${esc(m.assetNo)}</td>
@@ -646,10 +741,52 @@ body.busy{cursor:progress}
 
     $('#clear').addEventListener('click', () => { state.items = []; state.dir = null; $('#folderName').textContent = ''; render(); flash('', ''); });
     $('#optUnrecorded').addEventListener('change', async () => { setBusy(true); for (const it of state.items) await processItem(it); setBusy(false); render(); flash('Reports rebuilt.', 'ok'); });
+    // ----- Signatures (one per engineer) -----
+    const rebuildAll = async (msg) => { if (!state.items.length) { if (msg) flash(msg, 'ok'); showSigs(); return; } setBusy(true); for (const it of state.items) await processItem(it); setBusy(false); render(); showSigs(); flash(msg || 'Reports rebuilt.', 'ok'); };
+    const saveSigs = () => { try { const o = {}; Object.entries(state.sigs).forEach(([k, v]) => { o[k] = { name: v.name, url: v.url }; }); localStorage.setItem(SIGS_KEY, JSON.stringify(o)); return true; } catch (e) { return false; } };
+    const showSigs = () => {
+      const list = Object.entries(state.sigs).sort((a, b) => a[1].name.localeCompare(b[1].name));
+      $('#sigList').innerHTML = list.map(([k, v]) => `<span class="sigitem"><img src="${v.url}" alt=""><b>${esc(v.name)}</b><button type="button" class="plain" data-sigdel="${esc(k)}">Remove</button></span>`).join('');
+      const noEng = state.items.filter(it => it.model && !engOf(it.model).trim()).length;
+      const fam = pickScriptFont();
+      $('#sigNote').textContent = !$('#optSig').checked ? 'Signature block is off.'
+        : `Reports are signed with the Testing Engineer's name in ${fam ? fam : 'italic serif (no handwriting font found on this PC)'}${list.length ? ', or their signature image where one is loaded below' : ''}.`
+        + (noEng ? ` ${noEng} record${noEng === 1 ? ' has' : 's have'} no engineer and get${noEng === 1 ? 's' : ''} a blank line.` : '');
+    };
+    try {
+      const raw = JSON.parse(localStorage.getItem(SIGS_KEY) || '{}');
+      Object.entries(raw).forEach(([k, v]) => { const sg = dataUrlToSig(v.url); if (sg) state.sigs[k] = { ...sg, name: v.name }; });
+      localStorage.removeItem(OLD_SIG_KEY); // single shared signature from the previous build, no name attached
+      const on = localStorage.getItem(SIG_ON_KEY); if (on !== null) $('#optSig').checked = on === '1';
+    } catch (e) { /* storage unavailable */ }
+    showSigs(); onRendered = showSigs;
+    $('#sigPick').addEventListener('click', () => {
+      if (!$('#sigName').value.trim()) { flash('Type the engineer\'s name first, exactly as it appears in Ansur.', 'warn'); $('#sigName').focus(); return; }
+      $('#sigFile').click();
+    });
+    $('#sigFile').addEventListener('change', () => {
+      const f = $('#sigFile').files[0]; $('#sigFile').value = ''; if (!f) return;
+      const name = $('#sigName').value.trim().replace(/\s+/g, ' ');
+      const r = new FileReader();
+      r.onload = async () => {
+        const sg = dataUrlToSig(r.result);
+        if (!sg) { flash('That file isn\'t a PNG or JPEG image.', 'warn'); return; }
+        state.sigs[normName(name)] = { ...sg, name };
+        $('#sigName').value = '';
+        const saved = saveSigs();
+        await rebuildAll(saved ? `Signature saved for ${name}.` : `Signature added for ${name} for this session only (browser storage unavailable or full).`);
+      };
+      r.readAsDataURL(f);
+    });
+    $('#sigList').addEventListener('click', async (e) => {
+      const k = e.target.getAttribute && e.target.getAttribute('data-sigdel'); if (!k || !state.sigs[k]) return;
+      const name = state.sigs[k].name; delete state.sigs[k]; saveSigs(); await rebuildAll(`Signature removed for ${name}.`);
+    });
+    $('#optSig').addEventListener('change', async () => { try { localStorage.setItem(SIG_ON_KEY, $('#optSig').checked ? '1' : '0'); } catch (e) {} await rebuildAll(); });
     render();
   });
 
-  window.__ansur = { parseMtr, renderPdf, makeZip };
+  window.__ansur = { parseMtr, renderPdf, makeZip, scriptSig };
 })();
 </script>
 </body>
