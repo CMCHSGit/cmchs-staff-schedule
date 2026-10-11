@@ -6,6 +6,16 @@ service cloud.firestore {
     function isSignedIn()     { return request.auth != null; }
     function isAdmin()        { return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
     function isOwner(uid)     { return isSignedIn() && request.auth.uid == uid; }
+    // Maintenance schedule: the service side of the business keeps it, so the
+    // Engineers and Management teams can edit as well as admins. Everyone
+    // signed in can read it — knowing what PM is due where is not sensitive,
+    // and account managers need to see it without being able to change it.
+    function canEditMaintenance() {
+      return isSignedIn() && (
+        isAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.team in ['Engineers', 'Management']
+      );
+    }
 
     // Users — all signed-in users can read the whole roster (Team view needs
     // everyone's name/team, not just their own — this was previously
@@ -60,6 +70,13 @@ service cloud.firestore {
     match /activity/{entryId} {
       allow read:   if isAdmin();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // Maintenance schedule (internal.chsnz.co.nz/maintenance/) — replaces the
+    // PM tracking spreadsheet. One document per scheduled PM.
+    match /maintenance/{entryId} {
+      allow read:   if isSignedIn();
+      allow create, update, delete: if canEditMaintenance();
     }
   }
 }
