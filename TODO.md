@@ -42,6 +42,9 @@ no longer one day at a time).
       (Admin → Activity log) needs its own rule. Until then, every save still works (logging
       fails silently in the background, per-action, the same way the Excel mirror does), but
       the log itself stays empty and Admin → Activity log shows a banner saying so.
+      The same publish also covers `maintenance` (internal.chsnz.co.nz/maintenance/) and
+      `serviceOrders` (internal.chsnz.co.nz/service-orders/), added 2026-10-12. Paste the
+      **whole file** into the console, never a single block: publishing replaces every rule.
 
 ## Excel → app (built 2026-10-05; the automatic part needs IT)
 

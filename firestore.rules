@@ -78,5 +78,13 @@ service cloud.firestore {
       allow read:   if isSignedIn();
       allow create, update, delete: if canEditMaintenance();
     }
+
+    // Service orders (internal.chsnz.co.nz/service-orders/) — replaces the
+    // service order spreadsheet. One document per order line. Kept by the
+    // same people as the maintenance schedule.
+    match /serviceOrders/{orderId} {
+      allow read:   if isSignedIn();
+      allow create, update, delete: if canEditMaintenance();
+    }
   }
 }
