@@ -25,10 +25,44 @@ service cloud.firestore {
     // Delete additionally allows removing a "pending" placeholder record
     // (Admin's bulk-import feature) once claimed by a real sign-in — but
     // never a real (non-pending) account, which stays admin-only.
+    //
+    // What people may write about THEMSELVES is deliberately narrow. Until
+    // 14 Oct 2026 an owner could write any field on their own record, which
+    // meant anyone signed in could set role:'admin' or simproAccess:true from
+    // the browser console — and admin is what the Apps Script proxy trusts for
+    // Simpro writes. Every legitimate owner write is one of these three:
+    //   - the profile created on first sign-in (AuthContext.jsx), always
+    //     role 'user', possibly carrying a team claimed from a placeholder
+    //   - choosing a team once, while it is still empty (TeamOnboarding.jsx)
+    //   - registering a phone for push (push.js: fcmTokens)
+    // Anything else about a person — role, simproAccess, changing a team once
+    // set — is an admin's to change.
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create, update: if isOwner(uid) || isAdmin();
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.pending == true);
+      allow create: if isAdmin() || (isOwner(uid) && isNewOwnProfile());
+      allow update: if isAdmin() || (isOwner(uid) && isOwnSafeUpdate());
+      // A placeholder is claimed during someone's FIRST sign-in, before their
+      // own record is written (AuthContext: claimPendingProfile runs before
+      // setDoc). So only a person with no record yet may remove one — which
+      // stops anyone already signed in from deleting other people's
+      // placeholders, without copying the claim's fuzzy name matching here.
+      allow delete: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.pending == true &&
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      );
+    }
+
+    function isNewOwnProfile() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['displayName', 'email', 'team', 'role', 'excelName', 'createdAt'])
+        && d.role == 'user';
+    }
+
+    function isOwnSafeUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly(['team', 'fcmTokens'])
+        && (!changed.hasAny(['team']) || resource.data.get('team', null) in [null, '']);
     }
 
     // Locations — all signed-in users can read and add new ones (so a
