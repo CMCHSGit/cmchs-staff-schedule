@@ -120,5 +120,48 @@ service cloud.firestore {
       allow read:   if isSignedIn();
       allow create, update, delete: if canEditMaintenance();
     }
+
+    // Project tracker (internal.chsnz.co.nz/projects/) — replaces the project
+    // team's job register and weekly timeline sheets. Everyone signed in can
+    // read; anyone with a team set (or an admin) can edit, as on the shared
+    // sheets. The tracker's buttons follow the same test (store.jsx canEdit).
+    function canEditProjects() {
+      return isSignedIn() && (
+        isAdmin() ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('team', '') in ['Admin', 'Management', 'Engineers', 'Sales', 'Application']
+      );
+    }
+    match /projectJobs/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canEditProjects();
+    }
+    // Who is where each week: one record per person, job, week and activity.
+    match /projectAssignments/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if canEditProjects();
+    }
+    match /projectSettings/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if canEditProjects();
+    }
+    // Comments are signed by their author and never edited. Editors can
+    // delete them (their own, or with a job that is being deleted).
+    match /projectComments/{id} {
+      allow read:   if isSignedIn();
+      allow create: if canEditProjects() && request.resource.data.uid == request.auth.uid;
+      allow delete: if canEditProjects();
+    }
+    // A job's change history: written as yourself, never edited. Only the
+    // sample jobs' history can be removed (Settings → Remove sample data).
+    match /projectHistory/{id} {
+      allow read:   if isSignedIn();
+      allow create: if canEditProjects() && request.resource.data.uid == request.auth.uid;
+      allow delete: if canEditProjects() && resource.data.jobId.matches('sample-.*');
+    }
+    // Who has the tracker open: each person writes only their own record.
+    match /projectPresence/{uid} {
+      allow read:  if isSignedIn();
+      allow write: if isOwner(uid);
+    }
   }
 }
