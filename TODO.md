@@ -186,6 +186,11 @@ Rows are matched by the name the app shows (first name, or full name where two s
       & secrets → New client secret → copy the Value into `AZURE_CLIENT_SECRET`).
 - [ ] **#18** **IT to grant admin consent + create the client secret** (see #17) — the one
       step still blocking Excel sync going live.
+      Tested 2026-10-15: the *delegated* (sign in as Peter) Files.ReadWrite.All was added too, but
+      signing in gave "Need admin approval" — the tenant blocks user consent, so there is no
+      way round IT for writing to the shared workbook. When IT is back, one click does it:
+      "Grant admin consent for Cass Medical Limited" on the app's API permissions page, plus a
+      new client secret.
 - [x] **#19** **`SHAREPOINT_SITE_ID` resolved (2026-09-28)** via Graph Explorer — confirmed this file
       is on a SharePoint site (`cassmedical.sharepoint.com`, site `CassCHSDocument`), not a
       personal OneDrive. Real value isn't written here (public repo) — Peter has it, goes
