@@ -62,6 +62,10 @@ Excel has changed. Everything below is about making it automatic.
       overwrites the other. Alternative with no IT involvement: run that job from your PC on a
       Windows schedule against the OneDrive-synced file (needs the PC on, and a Firebase
       service-account key kept on it).
+      **Built 2026-10-15 in the hub repo** (`apps/schedule/scripts/excel-import.mjs`, setup in
+      `apps/schedule/EXCEL-IMPORT.md`), tested against the real workbook read-only. To switch it on:
+      create the Firebase key and the config file on the PC, do a dry run, then install the task.
+      The Graph version above is still the better long-term home (no PC needed).
 - [ ] **#33** The Excel's `19-Aug-24` tab has the wrong week typed in its header (it repeats the
       week before), so it's skipped when importing history. Fix the date in the Excel if that week matters.
 - [ ] **#34** Known gap: when a "not signed in yet" person signs in, their schedules move across
