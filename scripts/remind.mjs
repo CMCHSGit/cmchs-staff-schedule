@@ -142,8 +142,12 @@ async function main() {
   // needs the person to check it, so it doesn't count as submitted yet.
   const submittedUids = new Set(schedulesSnap.docs.map(d => d.data()).filter(s => !s.needsConfirm).map(s => s.uid))
 
-  // Placeholder (not-signed-in) people have no email, so drop out here.
-  const pending = users.filter(u => u.email && !submittedUids.has(u.uid))
+  // Placeholder (not-signed-in) people have no email, so drop out here. So
+  // does anyone an admin has switched off this reminder for, on the hub's
+  // Admin settings → Notifications (users/{uid}.notifications.scheduleReminder;
+  // missing means on).
+  const switchedOff = users.filter(u => u.notifications?.scheduleReminder === false).length
+  const pending = users.filter(u => u.email && !submittedUids.has(u.uid) && u.notifications?.scheduleReminder !== false)
 
   const emailOn = !!(process.env.RESEND_API_KEY && process.env.RESEND_FROM)
   const emailResults = emailOn
@@ -158,7 +162,7 @@ async function main() {
   const pushSent   = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.sent : 0), 0)
   const pushFailed = pushResults.reduce((n, r) => n + (r.status === 'fulfilled' ? r.value.failed : 1), 0)
 
-  console.log(`Reminders for week ${weekStart}: ${pending.length} due; email ${emailOn ? `${sent} sent/${failed} failed` : 'off (Resend not set up)'}, push ${pushSent} sent/${pushFailed} failed`)
+  console.log(`Reminders for week ${weekStart}: ${pending.length} due; email ${emailOn ? `${sent} sent/${failed} failed` : 'off (Resend not set up)'}, push ${pushSent} sent/${pushFailed} failed; ${switchedOff} switched off in Admin`)
   if (failed) process.exitCode = 1 // shows as a failed run in GitHub, without naming anyone
 }
 
