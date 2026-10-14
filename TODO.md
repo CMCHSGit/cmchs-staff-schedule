@@ -1,6 +1,6 @@
 # To do
 
-Last updated: 2026-09-29
+Last updated: 2026-10-15
 
 Every item has a permanent number — refer to it by that (e.g. "#7"). Numbers never change
 when items are ticked off; new items take the next unused number.
@@ -80,6 +80,35 @@ Code is done (`.github/workflows/`, `scripts/`); these are the setup steps.
 - [ ] **#30** Optional: email reminders — sign up at resend.com, verify `chsnz.co.nz` (DNS
       records, maybe with IT), then add `RESEND_API_KEY` + `RESEND_FROM` secrets. Until then
       the Thursday reminder is push-notification only.
+
+## Retire schedule.chsnz.co.nz — the schedule's home is internal.chsnz.co.nz/schedule
+
+Decided 2026-10-15: the app lives in the internal hub repo (`CMCHSGit/cmchs-internal-hub`, `apps/schedule`)
+and `schedule.chsnz.co.nz` is to be retired. Until it is, this repo is only the rollback — **make new
+changes in the hub repo**. The two copies are not synced and count versions separately. Both share the
+same Firestore, so what people fill in shows on either address. The hub's README ("The schedule move is
+mid-flight") has the reasoning behind the order below.
+
+- [ ] **#35** **Move the Thursday reminder to the hub.** Copy `.github/workflows/remind.yml` and
+      `scripts/remind.mjs` across (take the current `remind.mjs`, which now skips anyone switched off in the
+      hub's Admin) with `APP_URL: https://internal.chsnz.co.nz/schedule` — **no trailing slash**, the script
+      appends `/my`. Add the `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY`
+      secrets to the hub repo. Switch the old workflow off in the same step, so nobody is reminded twice.
+- [ ] **#36** Watch two Thursdays from the hub. Read the printed `push N sent/M failed` line, not the green
+      tick — the job's exit code only reflects email failures.
+- [ ] **#37** Tell staff to switch: open `internal.chsnz.co.nz/schedule`, add it to the home screen again, and
+      turn Thursday reminders on there (a phone's push registration belongs to the address the app was
+      installed from, so everyone enrols again once).
+- [ ] **#38** Retire the old site, **without removing its DNS**: ship a `sw.js` at the same path that unregisters
+      itself and deletes its caches, plus a page pointing to the new address. Installed copies serve from their
+      saved copy and write to the live database, so pulling the domain would leave people filling in an app
+      we think is gone.
+- [ ] **#39** Find the Firestore rules a home that outlasts this repo. They are `firestore.rules` at the root
+      of this repo, published by pasting into the Firebase console. The hub's `CLAUDE.md` points at
+      `chs-equipment/cmchs-staff-schedule/firestore.rules`, which doesn't exist — fix that pointer when
+      they move. (Publishing the pending rules is #31.)
+- [ ] **#40** Move the Excel job (`excel-sync.yml`, `scripts/sync-excel.mjs`) and the Excel items above
+      (#4, #17–#24, #32) to wherever the schedule lives once the old repo goes.
 
 ## Smartly leave integration (parked — pick up later)
 
