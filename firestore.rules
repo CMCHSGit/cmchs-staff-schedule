@@ -270,5 +270,95 @@ service cloud.firestore {
       allow read:  if isSignedIn();
       allow write: if isOwner(uid);
     }
+
+    // Asks (internal.chsnz.co.nz/asks/) — quick requests between staff,
+    // picked up by whoever can do them. An ask is seen only by the people
+    // involved: whoever asked, the people and whole teams it was sent to,
+    // whoever picked it up or was @mentioned (all named in `people`), plus
+    // admins. Anyone involved may change it — pick it up, hand it back, mark
+    // it done, comment — but only for themselves: taking an ask someone else
+    // has is for its owner, the asker or an admin. The asker or an admin
+    // deletes. askStats mirrors the counting fields with no text at all, so
+    // the Company page can show everyone's load to everyone; its rule checks
+    // it matches the ask exactly, so it can't be used to say anything else.
+    function myTeam() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('team', ''); }
+    function canSeeAsk(a) {
+      return isSignedIn() && (request.auth.uid in a.people || (myTeam() is string && myTeam() in a.teams) || isAdmin());
+    }
+    function isAsk(d) {
+      return d.keys().hasOnly(['title', 'details', 'createdBy', 'createdByName', 'createdAtMs', 'updatedAtMs',
+          'assignees', 'teams', 'people', 'owner', 'ownerName', 'status', 'waitingOn', 'urgent', 'due',
+          'doneAtMs', 'doneBy', 'photoCount', 'commentCount', 'lastCommentAtMs', 'lastCommentBy', 'event'])
+        && isShortText(d.title, 1, 200) && isShortText(d.details, 0, 4000)
+        && d.createdBy is string && d.createdAtMs is number && d.doneAtMs is number
+        && d.status in ['open', 'picked', 'waiting', 'done']
+        && d.assignees is list && d.assignees.size() <= 40
+        && d.teams is list && d.teams.hasOnly(['Admin', 'Management', 'Engineers', 'Sales', 'Application'])
+        && d.assignees.size() + d.teams.size() > 0
+        && d.people is list && d.people.size() <= 60 && d.createdBy in d.people
+        && d.owner is string && (d.owner == '' || d.owner in d.people)
+        // Nobody has an open one; somebody has one being worked on or waiting.
+        && (d.status != 'open' || d.owner == '')
+        && (!(d.status in ['picked', 'waiting']) || d.owner != '')
+        && isShortText(d.waitingOn, 0, 120) && d.urgent is bool
+        && d.due is string && (d.due == '' || d.due.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}'))
+        && (d.get('event', null) == null || d.event is map);
+    }
+    function isFairOwnerChange() {
+      let before = resource.data.owner;
+      let after = request.resource.data.owner;
+      return after == before
+        || (before == '' && after == request.auth.uid)
+        || before == request.auth.uid || resource.data.createdBy == request.auth.uid || isAdmin();
+    }
+    match /asks/{id} {
+      allow read: if canSeeAsk(resource.data);
+      allow create: if isSignedIn() && isAsk(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'open';
+      allow update: if canSeeAsk(resource.data) && isAsk(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAtMs == resource.data.createdAtMs
+        && isFairOwnerChange();
+      allow delete: if isSignedIn() && (resource.data.createdBy == request.auth.uid || isAdmin());
+
+      // The conversation: signed by its author, never edited. The author, the
+      // asker or an admin deletes one; an admin can re-add anyone's (restoring
+      // a backup). getAfter, so a comment that @mentions someone new and the
+      // ask's updated people list can be saved together.
+      match /comments/{cid} {
+        allow read: if canSeeAsk(get(/databases/$(database)/documents/asks/$(id)).data);
+        allow create: if canSeeAsk(getAfter(/databases/$(database)/documents/asks/$(id)).data)
+          && (request.resource.data.uid == request.auth.uid || isAdmin())
+          && request.resource.data.keys().hasOnly(['uid', 'name', 'text', 'atMs', 'mentions', 'photoIds'])
+          && isShortText(request.resource.data.text, 0, 4000)
+          && request.resource.data.mentions is list && request.resource.data.photoIds is list && request.resource.data.photoIds.size() <= 6;
+        allow delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin()
+          || get(/databases/$(database)/documents/asks/$(id)).data.createdBy == request.auth.uid);
+      }
+      // Photos from site: one shrunk JPEG per document (apps/asks/src/photos.js).
+      match /photos/{pid} {
+        allow read: if canSeeAsk(get(/databases/$(database)/documents/asks/$(id)).data);
+        allow create: if canSeeAsk(getAfter(/databases/$(database)/documents/asks/$(id)).data)
+          && (request.resource.data.uid == request.auth.uid || isAdmin())
+          && request.resource.data.keys().hasOnly(['uid', 'data', 'w', 'h', 'atMs', 'commentId'])
+          && request.resource.data.data is string
+          && request.resource.data.data.matches('data:image/jpeg;base64,.*')
+          && request.resource.data.data.size() < 500000;
+        allow delete: if isSignedIn() && (resource.data.uid == request.auth.uid || isAdmin()
+          || get(/databases/$(database)/documents/asks/$(id)).data.createdBy == request.auth.uid);
+      }
+    }
+    match /askStats/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.resource.data == askStatsOf(getAfter(/databases/$(database)/documents/asks/$(id)).data);
+      allow delete: if isSignedIn() && !existsAfter(/databases/$(database)/documents/asks/$(id));
+    }
+    function askStatsOf(a) {
+      return {
+        'status': a.status, 'owner': a.owner, 'assignees': a.assignees, 'teams': a.teams, 'due': a.due,
+        'urgent': a.urgent, 'createdBy': a.createdBy, 'createdAtMs': a.createdAtMs, 'doneAtMs': a.doneAtMs
+      };
+    }
   }
 }
