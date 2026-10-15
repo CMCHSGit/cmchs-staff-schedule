@@ -145,17 +145,20 @@ service cloud.firestore {
       allow create, update: if canEditProjects();
     }
     // Comments are signed by their author and never edited. Editors can
-    // delete them (their own, or with a job that is being deleted).
+    // delete them (their own, or with a job that is being deleted). An admin
+    // can also re-add other people's, to restore them from a backup (the
+    // tracker's Settings → Backups).
     match /projectComments/{id} {
       allow read:   if isSignedIn();
-      allow create: if canEditProjects() && request.resource.data.uid == request.auth.uid;
+      allow create: if canEditProjects() && (request.resource.data.uid == request.auth.uid || isAdmin());
       allow delete: if canEditProjects();
     }
     // A job's change history: written as yourself, never edited. Only the
-    // sample jobs' history can be removed (Settings → Remove sample data).
+    // sample jobs' history can be removed (Settings → Remove sample data). An
+    // admin can re-add other people's entries when restoring a backup.
     match /projectHistory/{id} {
       allow read:   if isSignedIn();
-      allow create: if canEditProjects() && request.resource.data.uid == request.auth.uid;
+      allow create: if canEditProjects() && (request.resource.data.uid == request.auth.uid || isAdmin());
       allow delete: if canEditProjects() && resource.data.jobId.matches('sample-.*');
     }
     // Who has the tracker open: each person writes only their own record.
