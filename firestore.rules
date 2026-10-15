@@ -212,6 +212,59 @@ service cloud.firestore {
       allow create: if canEditProjects() && (request.resource.data.uid == request.auth.uid || isAdmin());
       allow delete: if canEditProjects() && resource.data.jobId.matches('sample-.*');
     }
+    // Company news (the hub's Manage → News, shown on the hub home page).
+    // Anyone on a team posts, as themselves; the author, an admin or HR edits
+    // and deletes. Photos sit apart so the home page only fetches the ones it
+    // shows; anyone who may post may set one.
+    function isEngineering() {
+      return isSignedIn() && (isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('team', '') == 'Engineers');
+    }
+    match /announcements/{id} {
+      allow read:   if isSignedIn();
+      allow create: if canEditProjects() && request.resource.data.authorUid == request.auth.uid && isAnnouncement();
+      allow update: if (resource.data.authorUid == request.auth.uid || isAdmin() || isHR())
+        && request.resource.data.authorUid == resource.data.authorUid && isAnnouncement();
+      allow delete: if resource.data.authorUid == request.auth.uid || isAdmin() || isHR();
+    }
+    function isAnnouncement() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 200
+        && d.get('body', '') is string && d.get('body', '').size() <= 4000;
+    }
+    match /announcementPhotos/{id} {
+      allow read: if isSignedIn();
+      allow create, update: if canEditProjects()
+        && request.resource.data.keys().hasOnly(['photo'])
+        && request.resource.data.photo is string
+        && request.resource.data.photo.matches('data:image/jpeg;base64,.*')
+        && request.resource.data.photo.size() < 600000;
+      allow delete: if canEditProjects() || isHR();
+    }
+
+    // Tool requests and feedback (Manage → Tool requests / Feedback). Tool
+    // requests are public so people can +1 them; feedback is seen only by
+    // its author and the engineering team (Engineers, and admins). Anyone
+    // adds one as themselves; anyone may add or take back their own +1; only
+    // the engineering team sets the status and replies.
+    match /hubRequests/{id} {
+      allow read: if isSignedIn() && (resource.data.kind == 'tool' || resource.data.uid == request.auth.uid || isEngineering());
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.kind in ['tool', 'feedback']
+        && request.resource.data.status == 'new'
+        && request.resource.data.get('response', '') == ''
+        && (request.resource.data.kind == 'feedback' || request.resource.data.votes == [request.auth.uid]);
+      allow update: if (isEngineering() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'response', 'respondedBy', 'updatedAt']))
+        || (isSignedIn() && resource.data.kind == 'tool' && isOwnVoteChange());
+      allow delete: if isAdmin() || (resource.data.uid == request.auth.uid && resource.data.status == 'new');
+    }
+    function isOwnVoteChange() {
+      let before = resource.data.get('votes', []).toSet();
+      let after = request.resource.data.get('votes', []).toSet();
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes'])
+        && after.difference(before).union(before.difference(after)).hasOnly([request.auth.uid]);
+    }
+
     // Who has the tracker open: each person writes only their own record.
     match /projectPresence/{uid} {
       allow read:  if isSignedIn();
