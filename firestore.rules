@@ -6,6 +6,10 @@ service cloud.firestore {
     function isSignedIn()     { return request.auth != null; }
     function isAdmin()        { return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
     function isOwner(uid)     { return isSignedIn() && request.auth.uid == uid; }
+    // HR (the hub's People page): admins, plus anyone an admin flags hr: true.
+    function isHR()           { return isSignedIn() && (isAdmin() || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('hr', false) == true); }
+    // People's private records are keyed by their lower-case work email.
+    function isMyEmail(email) { return isSignedIn() && email != '' && request.auth.token.get('email', '').lower() == email; }
     // Maintenance schedule: the service side of the business keeps it, so the
     // Engineers and Management teams can edit as well as admins. Everyone
     // signed in can read it — knowing what PM is due where is not sensitive,
@@ -37,16 +41,21 @@ service cloud.firestore {
     //   - registering a phone for push (push.js: fcmTokens)
     // Anything else about a person — role, simproAccess, changing a team once
     // set — is an admin's to change.
+    //
+    // Since the hub's People page: people may also change their own name and
+    // work mobile; HR may add placeholders (with a work email), change anyone's
+    // name, team, work email and work mobile, and remove anyone but an admin.
+    // Only an admin can set role, simproAccess or hr.
     match /users/{uid} {
       allow read: if isSignedIn();
-      allow create: if isAdmin() || (isOwner(uid) && isNewOwnProfile());
-      allow update: if isAdmin() || (isOwner(uid) && isOwnSafeUpdate());
+      allow create: if isAdmin() || (isOwner(uid) && isNewOwnProfile()) || (isHR() && isHRNewPerson());
+      allow update: if isAdmin() || (isOwner(uid) && isOwnSafeUpdate()) || (isHR() && isHRSafeUpdate());
       // A placeholder is claimed during someone's FIRST sign-in, before their
       // own record is written (AuthContext: claimPendingProfile runs before
       // setDoc). So only a person with no record yet may remove one — which
       // stops anyone already signed in from deleting other people's
       // placeholders, without copying the claim's fuzzy name matching here.
-      allow delete: if isAdmin() || (
+      allow delete: if isAdmin() || (isHR() && resource.data.get('role', 'user') != 'admin') || (
         isSignedIn() &&
         resource.data.pending == true &&
         !exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -55,14 +64,56 @@ service cloud.firestore {
 
     function isNewOwnProfile() {
       let d = request.resource.data;
-      return d.keys().hasOnly(['displayName', 'email', 'team', 'role', 'excelName', 'createdAt'])
+      return d.keys().hasOnly(['displayName', 'email', 'team', 'role', 'excelName', 'workMobile', 'createdAt'])
         && d.role == 'user';
     }
 
     function isOwnSafeUpdate() {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return changed.hasOnly(['team', 'fcmTokens'])
-        && (!changed.hasAny(['team']) || resource.data.get('team', null) in [null, '']);
+      return changed.hasOnly(['team', 'fcmTokens', 'displayName', 'workMobile'])
+        && (!changed.hasAny(['team']) || resource.data.get('team', null) in [null, ''])
+        && (!changed.hasAny(['displayName']) || isShortText(request.resource.data.displayName, 1, 80))
+        && (!changed.hasAny(['workMobile']) || isShortText(request.resource.data.workMobile, 0, 40));
+    }
+
+    function isShortText(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+
+    function isHRNewPerson() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['displayName', 'email', 'team', 'role', 'pending', 'workMobile', 'createdAt'])
+        && d.role == 'user' && d.pending == true;
+    }
+
+    function isHRSafeUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'email', 'team', 'workMobile']);
+    }
+
+    // The hub's People page (HR profiles), keyed by lower-case work email.
+    // Pictures are visible to everyone signed in; personal and job details
+    // only to the person and HR. The person keeps their own personal details
+    // and job title; the rest of the job details are HR's.
+    match /staffPhotos/{email} {
+      allow read: if isSignedIn();
+      allow create, update: if (isMyEmail(email) || isHR())
+        && request.resource.data.keys().hasOnly(['photo', 'updatedAt'])
+        && request.resource.data.photo is string
+        && request.resource.data.photo.matches('data:image/jpeg;base64,.*')
+        && request.resource.data.photo.size() < 200000;
+      allow delete: if isMyEmail(email) || isHR();
+    }
+    match /staffPrivate/{email} {
+      allow read, delete: if isMyEmail(email) || isHR();
+      allow create, update: if (isMyEmail(email) || isHR())
+        && request.resource.data.keys().hasOnly(['dateOfBirth', 'personalEmail', 'personalPhone', 'address', 'emergency', 'updatedAt', 'updatedBy']);
+    }
+    match /staffEmployment/{email} {
+      allow read: if isMyEmail(email) || isHR();
+      allow delete: if isHR();
+      allow create: if (isHR() && isEmploymentDoc()) || (isMyEmail(email) && request.resource.data.keys().hasOnly(['jobTitle', 'updatedAt']));
+      allow update: if (isHR() && isEmploymentDoc()) || (isMyEmail(email) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['jobTitle', 'updatedAt']));
+    }
+    function isEmploymentDoc() {
+      return request.resource.data.keys().hasOnly(['jobTitle', 'startDate', 'employmentType', 'managerUid', 'updatedAt']);
     }
 
     // Locations — all signed-in users can read and add new ones (so a
