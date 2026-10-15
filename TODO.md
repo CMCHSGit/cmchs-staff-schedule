@@ -93,7 +93,7 @@ changes in the hub repo**. The two copies are not synced and count versions sepa
 same Firestore, so what people fill in shows on either address. The hub's README ("The schedule move is
 mid-flight") has the reasoning behind the order below.
 
-- [ ] **#35** **Move the Thursday reminder to the hub.** Copy `.github/workflows/remind.yml` and
+- [ ] **#35** *(code moved 2026-10-15: hub `.github/workflows/remind.yml` + `apps/schedule/scripts/remind.mjs`, with a dry-run manual run and a `HUB_REMINDERS` switch. Left: add the three `FIREBASE_*` secrets to the hub repo, dry-run it, then set `HUB_REMINDERS=true` there and disable this repo's workflow together.)* **Move the Thursday reminder to the hub.** Copy `.github/workflows/remind.yml` and
       `scripts/remind.mjs` across (take the current `remind.mjs`, which now skips anyone switched off in the
       hub's Admin) with `APP_URL: https://internal.chsnz.co.nz/schedule` — **no trailing slash**, the script
       appends `/my`. Add the `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY`
