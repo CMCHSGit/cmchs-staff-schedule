@@ -1,5 +1,10 @@
 # CMCHS Staff Schedule — Setup Guide
 
+> **This repo is the rollback copy only.** The live staff schedule is
+> `cmchs-internal-hub/apps/schedule` (internal.chsnz.co.nz/schedule/), and
+> everything is being merged into that one app: see
+> `cmchs-internal-hub/INTEGRATION-PLAN.md`. Make changes there, not here.
+
 A PWA for team weekly location scheduling. Built with React + Firebase, hosted entirely on GitHub (Pages + Actions).
 
 ---
