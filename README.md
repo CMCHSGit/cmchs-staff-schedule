@@ -25,7 +25,7 @@ A PWA for team weekly location scheduling. Built with React + Firebase, hosted e
 1. Go to [Firebase Console](https://console.firebase.google.com) → New project
 2. Add a **Web app** → copy the config values into your `.env` (the `VITE_FIREBASE_*` keys)
 3. Enable **Firestore** (production mode)
-4. Deploy the security rules: `firebase deploy --only firestore:rules`
+4. Deploy the security rules: they now live in `cmchs-internal-hub/rules/firestore.rules` (moved 16 Oct 2026); paste the whole file into the Firebase console
 5. Enable **Authentication** → Sign-in methods → **Microsoft** provider
 6. Go to **Project Settings → Cloud Messaging → Web configuration → Generate key pair**
    → copy the value into `VITE_FIREBASE_VAPID_KEY` in your `.env`. This is what lets the app

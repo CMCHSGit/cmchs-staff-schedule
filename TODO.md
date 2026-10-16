@@ -107,7 +107,7 @@ mid-flight") has the reasoning behind the order below.
       itself and deletes its caches, plus a page pointing to the new address. Installed copies serve from their
       saved copy and write to the live database, so pulling the domain would leave people filling in an app
       we think is gone.
-- [ ] **#39** Find the Firestore rules a home that outlasts this repo. They are `firestore.rules` at the root
+- [x] **#39** (Done 16 Oct 2026: they are now `cmchs-internal-hub/rules/firestore.rules`, with their tests in `rules/tests/`.) Find the Firestore rules a home that outlasts this repo. They are `firestore.rules` at the root
       of this repo, published by pasting into the Firebase console. The hub's `CLAUDE.md` points at
       `chs-equipment/cmchs-staff-schedule/firestore.rules`, which doesn't exist — fix that pointer when
       they move. (Publishing the pending rules is #31.)
